@@ -1,0 +1,49 @@
+version: '3.9'
+
+services:
+  mongodb-test:
+    image: mongo:7
+    container_name: salon_mongodb_test
+    restart: unless-stopped
+    ports:
+      - "27018:27017"
+    environment:
+      MONGO_INITDB_DATABASE: salon_booking_test
+    networks:
+      - salon_test_network
+
+  redis-test:
+    image: redis:7-alpine
+    container_name: salon_redis_test
+    restart: unless-stopped
+    ports:
+      - "6380:6379"
+    command: redis-server --appendonly no
+    networks:
+      - salon_test_network
+
+  test-runner:
+    build:
+      context: .
+      target: test
+    container_name: salon_test_runner
+    environment:
+      NODE_ENV: test
+      PORT: 3000
+      API_PREFIX: /api/v1
+      MONGODB_URI: mongodb://mongodb-test:27017/salon_booking_test
+      REDIS_URL: redis://redis-test:6379
+      JWT_ACCESS_SECRET: test_jwt_access_secret_key_32_characters_long_min
+      JWT_REFRESH_SECRET: test_jwt_refresh_secret_key_32_characters_long_min
+      CORS_ORIGIN: http://localhost:3000
+      LOG_LEVEL: fatal
+    depends_on:
+      - mongodb-test
+      - redis-test
+    networks:
+      - salon_test_network
+    command: npm run test:integration
+
+networks:
+  salon_test_network:
+    driver: bridge

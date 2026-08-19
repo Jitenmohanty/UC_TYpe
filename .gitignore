@@ -1,0 +1,17 @@
+node_modules/
+dist/
+coverage/
+.env
+*.env.local
+*.env.*.local
+logs/
+*.log
+.DS_Store
+Thumbs.db
+
+scratch/
+
+scratch/
+
+scratch/test_twilio.js
+scratch/test_twilio_templates.js

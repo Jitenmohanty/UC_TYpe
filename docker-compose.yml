@@ -1,0 +1,73 @@
+version: '3.9'
+
+services:
+  mongodb:
+    image: mongo:7
+    container_name: salon_mongodb
+    restart: unless-stopped
+    ports:
+      - "27017:27017"
+    volumes:
+      - mongodb_data:/data/db
+    environment:
+      MONGO_INITDB_DATABASE: salon_booking
+    networks:
+      - salon_network
+
+  redis:
+    image: redis:7-alpine
+    container_name: salon_redis
+    restart: unless-stopped
+    ports:
+      - "6379:6379"
+    volumes:
+      - redis_data:/data
+    command: redis-server --appendonly yes
+    networks:
+      - salon_network
+
+  api:
+    build:
+      context: .
+      target: production
+    container_name: salon_api
+    restart: unless-stopped
+    ports:
+      - "3000:3000"
+    env_file:
+      - .env
+    environment:
+      MONGODB_URI: mongodb://mongodb:27017/salon_booking
+      REDIS_URL: redis://redis:6379
+    depends_on:
+      - mongodb
+      - redis
+    networks:
+      - salon_network
+    command: node dist/server.js
+
+  worker:
+    build:
+      context: .
+      target: production
+    container_name: salon_worker
+    restart: unless-stopped
+    env_file:
+      - .env
+    environment:
+      MONGODB_URI: mongodb://mongodb:27017/salon_booking
+      REDIS_URL: redis://redis:6379
+    depends_on:
+      - mongodb
+      - redis
+    networks:
+      - salon_network
+    command: node dist/worker.js
+
+volumes:
+  mongodb_data:
+  redis_data:
+
+networks:
+  salon_network:
+    driver: bridge
