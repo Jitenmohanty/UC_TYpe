@@ -169,3 +169,49 @@ export const reverseGeocode = async (latitude: number, longitude: number): Promi
     formattedAddress: `Coordinates: ${latitude.toFixed(5)}, ${longitude.toFixed(5)}`,
   };
 };
+
+/**
+ * Forward Geocoding: Search coordinates by place/village/city name (e.g. "Rajkanika, Kendrapara")
+ */
+export const searchAddressCoords = async (
+  query: string,
+): Promise<{
+  latitude: number;
+  longitude: number;
+  formattedAddress: string;
+  city?: string;
+  state?: string;
+} | null> => {
+  if (!query || query.trim().length < 2) return null;
+  try {
+    const res = await fetch(
+      `https://nominatim.openstreetmap.org/search?format=json&q=${encodeURIComponent(query)}&limit=1&addressdetails=1`,
+      { headers: { Accept: 'application/json' } },
+    );
+    if (res.ok) {
+      const data = await res.json();
+      if (data && data.length > 0) {
+        const item = data[0];
+        const addr = item.address || {};
+        const cityName = addr.city || addr.town || addr.village || addr.county || query;
+        return {
+          latitude: Number(item.lat),
+          longitude: Number(item.lon),
+          formattedAddress: item.display_name || query,
+          city: cityName,
+          state: addr.state || 'Odisha',
+        };
+      }
+    }
+  } catch {}
+  return null;
+};
+
+/**
+ * Clear cached location from localStorage
+ */
+export const clearLocationCache = (): void => {
+  try {
+    localStorage.removeItem(LOCATION_STORAGE_KEY);
+  } catch {}
+};

@@ -2,7 +2,7 @@ import React, { useState, useEffect } from 'react';
 import type { ServiceItem, BarberProfile, Booking } from '../types';
 import { bookingApi, barbersApi } from '../services/api';
 import { fetchLiveCoordinates, getCachedCoordinates } from '../services/location';
-import { X, AlertCircle, Sparkles, UserCheck, Scissors, Calendar, Clock, MapPin, Navigation, Phone, Home, Compass } from 'lucide-react';
+import { X, AlertCircle, Sparkles, UserCheck, Scissors, Calendar, Clock, MapPin, Navigation, Phone, Home, Compass, Search } from 'lucide-react';
 
 interface BookingWizardModalProps {
   isOpen: boolean;
@@ -39,9 +39,30 @@ export const BookingWizardModal: React.FC<BookingWizardModalProps> = ({
   const [contactPhone, setContactPhone] = useState<string>('+91 ');
   const [houseNumber, setHouseNumber] = useState<string>('');
   const [landmark, setLandmark] = useState<string>('');
-  const [city, setCity] = useState<string>('Bhubaneswar');
-  const [postalCode, setPostalCode] = useState<string>('751024');
+  const [city, setCity] = useState<string>('Rajkanika, Kendrapara');
+  const [postalCode, setPostalCode] = useState<string>('754220');
+  const [searchPlaceQuery, setSearchPlaceQuery] = useState<string>('');
+  const [searchingPlace, setSearchingPlace] = useState<boolean>(false);
   const [addressDetails, setAddressDetails] = useState<{ city?: string; state?: string; country?: string }>({});
+
+  const handleSearchPlace = async (queryToSearch?: string) => {
+    const query = queryToSearch || searchPlaceQuery;
+    if (!query) return;
+    setSearchingPlace(true);
+    try {
+      const { searchAddressCoords } = await import('../services/location');
+      const res = await searchAddressCoords(query);
+      if (res) {
+        setLatitude(res.latitude);
+        setLongitude(res.longitude);
+        setFormattedAddress(res.formattedAddress);
+        if (res.city) setCity(res.city);
+        setLocationDetected(true);
+      }
+    } finally {
+      setSearchingPlace(false);
+    }
+  };
 
   const [availableBarbers, setAvailableBarbers] = useState<BarberProfile[]>([]);
   const [serviceId, setServiceId] = useState<string>('');
@@ -478,6 +499,65 @@ export const BookingWizardModal: React.FC<BookingWizardModalProps> = ({
                   </div>
                 </div>
 
+                {/* Search & Location Presets */}
+                <div>
+                  <label className="block text-[10px] font-bold text-gray-400 uppercase tracking-wider mb-1 flex items-center justify-between">
+                    <span className="flex items-center gap-1">
+                      <Search className="w-3 h-3 text-purple-400" />
+                      Search City / Town / Village / Landmark
+                    </span>
+                    <span className="text-[10px] text-purple-300 font-normal">Fast GPS Locator</span>
+                  </label>
+                  <div className="flex items-center gap-2">
+                    <input
+                      type="text"
+                      placeholder="e.g. Rajkanika, Kendrapara or Patia, Bhubaneswar"
+                      value={searchPlaceQuery}
+                      onChange={(e) => setSearchPlaceQuery(e.target.value)}
+                      onKeyDown={(e) => {
+                        if (e.key === 'Enter') {
+                          e.preventDefault();
+                          void handleSearchPlace();
+                        }
+                      }}
+                      className="flex-1 glass-input px-3.5 py-2 rounded-2xl text-xs text-white placeholder-gray-500"
+                    />
+                    <button
+                      type="button"
+                      onClick={() => void handleSearchPlace()}
+                      disabled={searchingPlace}
+                      className="px-4 py-2 rounded-2xl bg-purple-600 hover:bg-purple-500 text-white text-xs font-bold transition-all flex items-center gap-1 shrink-0"
+                    >
+                      {searchingPlace ? 'Locating...' : 'Set GPS'}
+                    </button>
+                  </div>
+
+                  {/* Quick Preset Location Chips */}
+                  <div className="flex flex-wrap items-center gap-1.5 mt-2">
+                    <span className="text-[10px] text-gray-400 font-medium">Quick Pick:</span>
+                    {[
+                      { name: '📍 Rajkanika, Kendrapara', q: 'Rajkanika, Kendrapara, Odisha', pin: '754220' },
+                      { name: '📍 Kendrapara Town', q: 'Kendrapara, Odisha', pin: '754211' },
+                      { name: '📍 Bhubaneswar', q: 'Bhubaneswar, Odisha', pin: '751024' },
+                      { name: '📍 Cuttack', q: 'Cuttack, Odisha', pin: '753001' },
+                    ].map((chip) => (
+                      <button
+                        key={chip.name}
+                        type="button"
+                        onClick={() => {
+                          setSearchPlaceQuery(chip.q);
+                          setCity(chip.name.replace('📍 ', ''));
+                          setPostalCode(chip.pin);
+                          void handleSearchPlace(chip.q);
+                        }}
+                        className="text-[10px] px-2.5 py-1 rounded-xl bg-obsidian-800 hover:bg-purple-900/40 border border-white/10 hover:border-purple-500/40 text-gray-300 hover:text-white transition-all"
+                      >
+                        {chip.name}
+                      </button>
+                    ))}
+                  </div>
+                </div>
+
                 {/* Auto-detected GPS Coordinates & Reverse Geocoded Preview */}
                 <div className="pt-2 border-t border-white/10 space-y-2">
                   <div className="flex items-center justify-between">
@@ -492,7 +572,7 @@ export const BookingWizardModal: React.FC<BookingWizardModalProps> = ({
                       className="text-[10px] text-purple-300 hover:text-white bg-purple-600/30 hover:bg-purple-600/50 px-2.5 py-1 rounded-xl border border-purple-500/40 flex items-center gap-1 transition-all"
                     >
                       <Navigation className={`w-3 h-3 text-purple-400 ${locationLoading ? 'animate-spin' : ''}`} />
-                      {locationLoading ? 'Detecting GPS...' : 'Refresh Live GPS'}
+                      {locationLoading ? 'Detecting Device GPS...' : 'Detect Device GPS'}
                     </button>
                   </div>
 
@@ -500,7 +580,7 @@ export const BookingWizardModal: React.FC<BookingWizardModalProps> = ({
                     <div className="flex items-center justify-between text-gray-400 text-[10px]">
                       <span>Coordinates: {latitude?.toFixed(4)}, {longitude?.toFixed(4)}</span>
                       <span className="text-emerald-400 font-mono">
-                        {locationDetected ? '✅ GPS Detected' : '📍 City Coords Ready'}
+                        {locationDetected ? '✅ Location Pinned' : '📍 Ready'}
                       </span>
                     </div>
                     {formattedAddress && (
