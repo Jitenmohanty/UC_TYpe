@@ -28,10 +28,3 @@ EXPOSE 3000
 
 # Default: API server (override in docker-compose for worker)
 CMD ["node", "dist/server.js"]
-
-FROM base AS test
-ENV NODE_ENV=test
-COPY --from=deps /app/node_modules ./node_modules
-COPY . .
-CMD ["npm", "run", "test:integration"]
-

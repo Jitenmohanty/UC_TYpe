@@ -134,7 +134,6 @@ const bookingSchema = new Schema<IBooking>(
 bookingSchema.index({ customerId: 1, createdAt: -1 });
 bookingSchema.index({ status: 1, scheduledStart: 1 });
 bookingSchema.index({ customerId: 1, status: 1 });
-bookingSchema.index({ bookingNumber: 1 }, { unique: true });
 bookingSchema.index({ customerLocation: '2dsphere' });
 
 // ─── Pre-save: generate booking number ────────────────────────────────────────

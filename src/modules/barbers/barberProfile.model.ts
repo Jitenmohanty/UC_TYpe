@@ -98,7 +98,6 @@ const barberProfileSchema = new Schema<IBarberProfile>(
 // ─── Indexes ──────────────────────────────────────────────────────────────────
 barberProfileSchema.index({ currentLocation: '2dsphere' }, { sparse: true });
 barberProfileSchema.index({ status: 1, autoAllocationEnabled: 1 });
-barberProfileSchema.index({ userId: 1 }, { unique: true });
 
 // ─── Virtual: acceptance rate ─────────────────────────────────────────────────
 barberProfileSchema.virtual('acceptanceRate').get(function (this: IBarberProfile) {

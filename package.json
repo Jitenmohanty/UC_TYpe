@@ -5,6 +5,7 @@
   "main": "dist/server.js",
   "scripts": {
     "build": "tsc --project tsconfig.json",
+    "start": "node dist/server.js",
     "start:api": "node dist/server.js",
     "start:worker": "node dist/worker.js",
     "dev": "tsx watch src/server.ts",

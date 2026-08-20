@@ -67,11 +67,6 @@ adminRoutes.post(
       allocationAttempt: booking.allocationAttempts + 1,
     });
 
-    await bookingStateMachine.transition(
-      booking._id,
-      booking.status,
-      BookingStatus.CONFIRMED,
-    );
 
     const { generateOtp, hashOtp } = await import('../../common/utils/otp.utils');
     const { twilioService } = await import('../../common/services/twilio.service');

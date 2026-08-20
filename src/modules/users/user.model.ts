@@ -98,8 +98,6 @@ const userSchema = new Schema<IUser>(
 );
 
 // ─── Indexes ─────────────────────────────────────────────────────────────────
-userSchema.index({ email: 1 }, { unique: true });
-userSchema.index({ phone: 1 }, { unique: true });
 userSchema.index({ role: 1, status: 1 });
 userSchema.index({ location: '2dsphere' }, { sparse: true });
 

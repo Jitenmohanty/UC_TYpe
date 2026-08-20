@@ -60,7 +60,6 @@ const assignmentSchema = new Schema<IAssignment>(
 // ─── Indexes ──────────────────────────────────────────────────────────────────
 assignmentSchema.index({ bookingId: 1, status: 1 });
 assignmentSchema.index({ barberId: 1, status: 1 });
-assignmentSchema.index({ bookingId: 1 });
 assignmentSchema.index({ barberId: 1, createdAt: -1 });
 
 export const AssignmentModel = mongoose.model<IAssignment>('Assignment', assignmentSchema);

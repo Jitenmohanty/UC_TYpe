@@ -17,7 +17,6 @@ export const BOOKING_TRANSITIONS: Record<BookingStatus, Set<BookingStatus>> = {
   [BookingStatus.PENDING]: new Set([BookingStatus.SEARCHING, BookingStatus.CUSTOMER_CANCELLED]),
   [BookingStatus.SEARCHING]: new Set([
     BookingStatus.OFFERED,
-    BookingStatus.CONFIRMED,
     BookingStatus.NO_BARBER_AVAILABLE,
     BookingStatus.CUSTOMER_CANCELLED,
     BookingStatus.ADMIN_CANCELLED,
