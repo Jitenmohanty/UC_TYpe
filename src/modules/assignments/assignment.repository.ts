@@ -44,7 +44,10 @@ export class AssignmentRepository {
     })
       .populate({
         path: 'bookingId',
-        populate: { path: 'customerId', select: 'name email phone' },
+        populate: [
+          { path: 'customerId', select: 'name email phone location' },
+          { path: 'serviceId', select: 'name price durationMinutes' },
+        ],
       })
       .sort({ createdAt: -1 })
       .exec();

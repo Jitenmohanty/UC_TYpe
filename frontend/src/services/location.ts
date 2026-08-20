@@ -79,3 +79,93 @@ export const fetchLiveCoordinates = async (syncWithBackend = true): Promise<GeoC
     );
   });
 };
+
+export interface AddressDetails {
+  formattedAddress: string;
+  city?: string;
+  state?: string;
+  country?: string;
+  road?: string;
+  neighbourhood?: string;
+  postcode?: string;
+}
+
+/**
+ * Free Reverse Geocoding via BigDataCloud & OpenStreetMap Nominatim with local caching
+ */
+export const reverseGeocode = async (latitude: number, longitude: number): Promise<AddressDetails> => {
+  const cacheKey = `aura_addr_${latitude.toFixed(4)}_${longitude.toFixed(4)}`;
+  try {
+    const cached = localStorage.getItem(cacheKey);
+    if (cached) {
+      return JSON.parse(cached);
+    }
+  } catch {
+    // Ignore storage parse error
+  }
+
+  // 1. Try BigDataCloud Free Reverse Geocoding API (Fast, Free, Client-side CORS friendly)
+  try {
+    const res = await fetch(
+      `https://api.bigdatacloud.net/data/reverse-geocode-client?latitude=${latitude}&longitude=${longitude}&localityLanguage=en`
+    );
+    if (res.ok) {
+      const data = await res.json();
+      const locality = data.locality || data.localityInfo?.administrative?.[3]?.name || data.localityInfo?.administrative?.[2]?.name || '';
+      const city = data.city || data.principalSubdivision || '';
+      const parts = [locality, city, data.postcode, data.countryName].filter(Boolean);
+
+      const formatted = parts.join(', ') || `Location (${latitude.toFixed(4)}, ${longitude.toFixed(4)})`;
+      const result: AddressDetails = {
+        formattedAddress: formatted,
+        city: data.city || data.locality || data.principalSubdivision,
+        state: data.principalSubdivision,
+        country: data.countryName,
+        postcode: data.postcode,
+      };
+
+      try {
+        localStorage.setItem(cacheKey, JSON.stringify(result));
+      } catch {}
+      return result;
+    }
+  } catch {
+    // Fallback to Nominatim
+  }
+
+  // 2. Fallback: OpenStreetMap Nominatim Free API
+  try {
+    const res = await fetch(
+      `https://nominatim.openstreetmap.org/reverse?format=json&lat=${latitude}&lon=${longitude}&zoom=18&addressdetails=1`,
+      { headers: { Accept: 'application/json' } }
+    );
+    if (res.ok) {
+      const data = await res.json();
+      const addr = data.address || {};
+      const street = addr.road || addr.suburb || addr.neighbourhood || '';
+      const cityName = addr.city || addr.town || addr.village || addr.county || '';
+      const parts = [street, cityName, addr.state, addr.postcode, addr.country].filter(Boolean);
+
+      const formatted = data.display_name || parts.join(', ') || `Location (${latitude.toFixed(4)}, ${longitude.toFixed(4)})`;
+      const result: AddressDetails = {
+        formattedAddress: formatted,
+        city: cityName,
+        state: addr.state,
+        country: addr.country,
+        road: addr.road,
+        neighbourhood: addr.neighbourhood || addr.suburb,
+        postcode: addr.postcode,
+      };
+
+      try {
+        localStorage.setItem(cacheKey, JSON.stringify(result));
+      } catch {}
+      return result;
+    }
+  } catch {}
+
+  // 3. Coordinate fallback
+  return {
+    formattedAddress: `Coordinates: ${latitude.toFixed(5)}, ${longitude.toFixed(5)}`,
+  };
+};

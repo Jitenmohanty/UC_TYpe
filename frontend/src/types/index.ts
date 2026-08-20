@@ -56,16 +56,26 @@ export type BookingStatus =
   | 'ADMIN_CANCELLED'
   | 'SYSTEM_CANCELLED';
 
+export interface AddressSnapshot {
+  formattedAddress?: string;
+  city?: string;
+  state?: string;
+  country?: string;
+}
+
 export interface Booking {
   _id: string;
   bookingNumber: string;
-  customerId: string;
+  customerId: string | User;
+  customer?: User;
   serviceId: string | ServiceItem;
   serviceSnapshot: {
     name: string;
     price: number;
     durationMinutes: number;
+    categoryId?: string;
   };
+  addressSnapshot?: AddressSnapshot;
   scheduledDate: string;
   startTime: string;
   endTime: string;

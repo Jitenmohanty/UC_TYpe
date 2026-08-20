@@ -128,6 +128,12 @@ export const bookingApi = {
     barberPreference?: 'ANY' | 'SPECIFIC';
     preferredBarberId?: string;
     customerLocation: { latitude: number; longitude: number };
+    addressSnapshot?: {
+      formattedAddress?: string;
+      city?: string;
+      state?: string;
+      country?: string;
+    };
   }): Promise<Booking> => {
     const res = await api.post('/bookings', payload);
     return res.data.data;

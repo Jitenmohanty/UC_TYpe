@@ -35,6 +35,9 @@ export const BookingWizardModal: React.FC<BookingWizardModalProps> = ({
   const [longitude, setLongitude] = useState<number>(initialCoords.longitude);
   const [locationLoading, setLocationLoading] = useState<boolean>(false);
   const [locationDetected, setLocationDetected] = useState<boolean>(false);
+  const [formattedAddress, setFormattedAddress] = useState<string>('');
+  const [addressDetails, setAddressDetails] = useState<{ city?: string; state?: string; country?: string }>({});
+  const [addressResolving, setAddressResolving] = useState<boolean>(false);
 
   const [availableBarbers, setAvailableBarbers] = useState<BarberProfile[]>([]);
   const [serviceId, setServiceId] = useState<string>('');
@@ -57,8 +60,27 @@ export const BookingWizardModal: React.FC<BookingWizardModalProps> = ({
       setLatitude(coords.latitude);
       setLongitude(coords.longitude);
       setLocationDetected(true);
+      void resolveAddressFromCoords(coords.latitude, coords.longitude);
     } finally {
       setLocationLoading(false);
+    }
+  };
+
+  const resolveAddressFromCoords = async (lat: number, lng: number) => {
+    setAddressResolving(true);
+    try {
+      const { reverseGeocode } = await import('../services/location');
+      const addr = await reverseGeocode(lat, lng);
+      setFormattedAddress(addr.formattedAddress);
+      setAddressDetails({
+        city: addr.city,
+        state: addr.state,
+        country: addr.country,
+      });
+    } catch {
+      // Keep default
+    } finally {
+      setAddressResolving(false);
     }
   };
 
@@ -70,8 +92,10 @@ export const BookingWizardModal: React.FC<BookingWizardModalProps> = ({
   useEffect(() => {
     if (step === 3 && !locationDetected) {
       void requestLiveLocation();
+    } else if (step === 3 && latitude && longitude && !formattedAddress) {
+      void resolveAddressFromCoords(latitude, longitude);
     }
-  }, [step]);
+  }, [step, latitude, longitude]);
 
   // Initialize service & barber state on open/props change
   useEffect(() => {
@@ -142,6 +166,12 @@ export const BookingWizardModal: React.FC<BookingWizardModalProps> = ({
         latitude: Number(finalLat),
         longitude: Number(finalLng),
       },
+      addressSnapshot: {
+        formattedAddress: formattedAddress || `Coordinates: ${Number(finalLat).toFixed(5)}, ${Number(finalLng).toFixed(5)}`,
+        city: addressDetails.city || 'Doorstep Service',
+        state: addressDetails.state || '',
+        country: addressDetails.country || 'India',
+      },
     };
 
     try {
@@ -158,7 +188,7 @@ export const BookingWizardModal: React.FC<BookingWizardModalProps> = ({
       const errMsg =
         err?.response?.data?.error?.message ||
         err?.response?.data?.message ||
-        'Failed to submit booking. Please sign in to place a booking.';
+        'Failed to create booking. Please check details and try again.';
       setError(errMsg);
     }
   };
@@ -382,10 +412,33 @@ export const BookingWizardModal: React.FC<BookingWizardModalProps> = ({
                   </div>
                 </div>
 
+                {/* Doorstep Address Display / Editable */}
+                <div>
+                  <label className="block text-[10px] text-gray-400 font-bold uppercase tracking-wider mb-1 flex items-center justify-between">
+                    <span>Doorstep Delivery Address</span>
+                    {addressResolving && (
+                      <span className="text-purple-400 text-[10px] flex items-center gap-1">
+                        <Navigation className="w-3 h-3 animate-spin" /> Resolving address...
+                      </span>
+                    )}
+                  </label>
+                  <input
+                    type="text"
+                    required
+                    placeholder="Enter your flat/house no, street, landmark..."
+                    value={formattedAddress}
+                    onChange={(e) => setFormattedAddress(e.target.value)}
+                    className="w-full glass-input px-4 py-2.5 rounded-2xl text-xs text-white"
+                  />
+                  <span className="text-[10px] text-gray-400 mt-1 block">
+                    Auto-detected via live GPS coordinates. Edit or add flat/apartment details if needed.
+                  </span>
+                </div>
+
                 <div className="p-3.5 rounded-2xl bg-purple-500/10 border border-purple-500/20 text-purple-200 text-xs flex items-center justify-between">
                   <div className="flex items-center gap-2">
                     <CheckCircle2 className="w-4 h-4 text-emerald-400 shrink-0" />
-                    <span>Real-time GPS coordinates will be dispatched to your assigned barber.</span>
+                    <span>Real-time GPS & address will be dispatched to your assigned barber.</span>
                   </div>
                   <span className="text-[10px] text-emerald-400 font-mono font-bold bg-emerald-500/10 px-2 py-0.5 rounded-lg border border-emerald-500/30">
                     Live GPS Sync
