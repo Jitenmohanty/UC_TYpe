@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { ShieldCheck, Users, Calendar, IndianRupee, Activity, Zap, Sliders, RefreshCw, CheckCircle2, Clock, UserCheck, MapPin, Scissors, AlertCircle } from 'lucide-react';
+import { ShieldCheck, Users, Calendar, IndianRupee, Activity, Zap, Sliders, RefreshCw, CheckCircle2, Clock, UserCheck, MapPin, Scissors, AlertCircle, Ban, X, Loader2 } from 'lucide-react';
 import type { User, BarberProfile, Booking } from '../types';
 import { adminApi } from '../services/api';
 
@@ -16,6 +16,12 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({ user }) => {
   const [statusMessage, setStatusMessage] = useState<string | null>(null);
   const [selectedBarberForBooking, setSelectedBarberForBooking] = useState<Record<string, string>>({});
   const [assigningBookingId, setAssigningBookingId] = useState<string | null>(null);
+
+  // Admin Cancel state
+  const [cancelModalOpen, setCancelModalOpen] = useState(false);
+  const [cancellingBookingId, setCancellingBookingId] = useState<string | null>(null);
+  const [cancelReason, setCancelReason] = useState('');
+  const [isCancelling, setIsCancelling] = useState(false);
 
   const fetchAdminData = async () => {
     setLoading(true);
@@ -74,6 +80,30 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({ user }) => {
       setStatusMessage(err?.response?.data?.error?.message || 'Failed to assign barber');
     } finally {
       setAssigningBookingId(null);
+      setTimeout(() => setStatusMessage(null), 3500);
+    }
+  };
+
+  const handleOpenCancelModal = (bookingId: string) => {
+    setCancellingBookingId(bookingId);
+    setCancelReason('Cancelled by Platform Administrator');
+    setCancelModalOpen(true);
+  };
+
+  const handleAdminCancelSubmit = async () => {
+    if (!cancellingBookingId) return;
+    setIsCancelling(true);
+    try {
+      await adminApi.cancelBooking(cancellingBookingId, cancelReason || 'Cancelled by Admin');
+      setStatusMessage('✅ Booking cancelled by Administrator. Customer dashboard updated.');
+      setCancelModalOpen(false);
+      setCancellingBookingId(null);
+      setCancelReason('');
+      await fetchAdminData();
+    } catch (err: any) {
+      setStatusMessage(err?.response?.data?.error?.message || 'Failed to cancel booking');
+    } finally {
+      setIsCancelling(false);
       setTimeout(() => setStatusMessage(null), 3500);
     }
   };
@@ -425,25 +455,97 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({ user }) => {
                   <th className="px-4 py-3">Service</th>
                   <th className="px-4 py-3">Scheduled Time</th>
                   <th className="px-4 py-3">Price</th>
-                  <th className="px-4 py-3 rounded-r-xl">Status</th>
+                  <th className="px-4 py-3">Status</th>
+                  <th className="px-4 py-3 rounded-r-xl text-right">Admin Action</th>
                 </tr>
               </thead>
               <tbody className="divide-y divide-white/5">
-                {bookings.slice(0, 10).map((bk) => (
+                {bookings.slice(0, 15).map((bk) => (
                   <tr key={bk._id} className="hover:bg-white/5 transition-colors">
                     <td className="px-4 py-3.5 font-bold text-white">{bk.bookingNumber}</td>
                     <td className="px-4 py-3.5 text-purple-300">{bk.serviceSnapshot?.name || 'Service'}</td>
                     <td className="px-4 py-3.5 text-gray-300">{bk.scheduledDate} at {bk.startTime}</td>
                     <td className="px-4 py-3.5 text-amber-400 font-bold">₹{bk.serviceSnapshot?.price || 0}</td>
                     <td className="px-4 py-3.5">
-                      <span className="px-2 py-0.5 rounded-full bg-purple-500/20 text-purple-300 text-[10px] font-bold border border-purple-500/30">
+                      <span className={`px-2 py-0.5 rounded-full text-[10px] font-bold border ${
+                        bk.status === 'COMPLETED'
+                          ? 'bg-emerald-500/20 text-emerald-300 border-emerald-500/30'
+                          : bk.status === 'CONFIRMED'
+                          ? 'bg-purple-500/20 text-purple-300 border-purple-500/30'
+                          : bk.status === 'ADMIN_CANCELLED' || bk.status === 'CUSTOMER_CANCELLED'
+                          ? 'bg-red-500/20 text-red-300 border-red-500/30'
+                          : 'bg-amber-500/20 text-amber-300 border-amber-500/30'
+                      }`}>
                         {bk.status}
                       </span>
+                    </td>
+                    <td className="px-4 py-3.5 text-right">
+                      {!['COMPLETED', 'CUSTOMER_CANCELLED', 'ADMIN_CANCELLED', 'EXPIRED'].includes(bk.status) ? (
+                        <button
+                          onClick={() => handleOpenCancelModal(bk._id)}
+                          className="px-2.5 py-1 rounded-lg bg-red-500/10 hover:bg-red-500/20 text-red-300 border border-red-500/30 text-[11px] font-bold transition-all"
+                        >
+                          Cancel Booking
+                        </button>
+                      ) : (
+                        <span className="text-[10px] text-gray-500">—</span>
+                      )}
                     </td>
                   </tr>
                 ))}
               </tbody>
             </table>
+          </div>
+        </div>
+      )}
+
+      {/* ─── Admin Cancel Booking Modal ─────────────────────────────────────── */}
+      {cancelModalOpen && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/85 backdrop-blur-md animate-fade-in">
+          <div className="glass-card rounded-3xl p-6 md:p-8 w-full max-w-md border-red-500/40 space-y-5 text-left shadow-2xl">
+            <div className="flex items-center justify-between pb-3 border-b border-white/10">
+              <h3 className="text-lg font-bold text-white flex items-center gap-2">
+                <Ban className="w-5 h-5 text-red-400" />
+                Cancel Customer Booking (Admin)
+              </h3>
+              <button
+                onClick={() => setCancelModalOpen(false)}
+                className="p-1 rounded-lg text-gray-400 hover:text-white"
+              >
+                <X className="w-5 h-5" />
+              </button>
+            </div>
+
+            <p className="text-xs text-gray-300">
+              Please enter the cancellation reason. The customer and assigned barber will be notified that this booking was cancelled by the Admin:
+            </p>
+
+            <textarea
+              value={cancelReason}
+              onChange={(e) => setCancelReason(e.target.value)}
+              placeholder="e.g., Unserviceable location / Duplicate booking / Customer requested phone cancel"
+              rows={3}
+              className="w-full p-3.5 rounded-2xl bg-obsidian-900 border border-white/10 text-xs text-white placeholder-gray-500 focus:border-red-500/60 outline-none"
+            />
+
+            <div className="grid grid-cols-2 gap-3 pt-2">
+              <button
+                type="button"
+                onClick={() => setCancelModalOpen(false)}
+                className="py-3 rounded-xl bg-white/5 hover:bg-white/10 text-gray-300 text-xs font-bold border border-white/10"
+              >
+                Keep Booking
+              </button>
+              <button
+                type="button"
+                onClick={handleAdminCancelSubmit}
+                disabled={isCancelling}
+                className="py-3 rounded-xl bg-red-600 hover:bg-red-500 text-white text-xs font-bold transition-all flex items-center justify-center gap-2 shadow-lg shadow-red-600/30"
+              >
+                {isCancelling ? <Loader2 className="w-4 h-4 animate-spin" /> : <Ban className="w-4 h-4" />}
+                Confirm Admin Cancel
+              </button>
+            </div>
           </div>
         </div>
       )}

@@ -200,15 +200,31 @@ export function App() {
                     </div>
                   </div>
 
-                  <div className="flex items-center gap-3">
+                  <div className="flex flex-wrap items-center gap-3">
                     <button
                       onClick={() => setIsHistoryOpen(true)}
                       className="text-xs text-purple-300 hover:text-white underline font-medium"
                     >
                       View All My Bookings
                     </button>
-                    <span className="px-3 py-1 rounded-full bg-purple-500/20 text-purple-300 text-xs font-bold border border-purple-500/30">
-                      Status: {activeBooking.status}
+                    <span className={`px-3 py-1 rounded-full text-xs font-bold border ${
+                      activeBooking.status === 'CONFIRMED'
+                        ? 'bg-green-500/20 text-green-300 border-green-500/40'
+                        : activeBooking.status === 'IN_PROGRESS'
+                        ? 'bg-purple-500/20 text-purple-300 border-purple-500/40 animate-pulse'
+                        : activeBooking.status === 'ADMIN_CANCELLED'
+                        ? 'bg-rose-500/20 text-rose-300 border-rose-500/40'
+                        : activeBooking.status === 'BARBER_CANCELLED' || activeBooking.status === 'SEARCHING'
+                        ? 'bg-amber-500/20 text-amber-300 border-amber-500/40'
+                        : 'bg-purple-500/20 text-purple-300 border-purple-500/30'
+                    }`}>
+                      {activeBooking.status === 'ADMIN_CANCELLED'
+                        ? `Cancelled by Admin ${activeBooking.cancellationReason ? `(${activeBooking.cancellationReason})` : ''}`
+                        : activeBooking.status === 'BARBER_CANCELLED'
+                        ? 'Reallocating nearby partner...'
+                        : activeBooking.status === 'SEARCHING'
+                        ? 'Searching nearby barbers...'
+                        : `Status: ${activeBooking.status}`}
                     </span>
                   </div>
                 </div>

@@ -198,6 +198,10 @@ export const assignmentApi = {
     const res = await api.post(`/assignments/${assignmentId}/complete`);
     return res.data.data;
   },
+  cancel: async (assignmentId: string, reason: string): Promise<Assignment> => {
+    const res = await api.post(`/assignments/${assignmentId}/cancel`, { reason });
+    return res.data.data;
+  },
 };
 
 // Admin API

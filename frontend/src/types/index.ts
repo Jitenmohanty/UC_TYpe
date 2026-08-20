@@ -88,6 +88,9 @@ export interface Booking {
     type: 'Point';
     coordinates: [number, number];
   };
+  cancellationReason?: string;
+  cancelledBy?: string;
+  cancelledAt?: string;
   createdAt: string;
 }
 
@@ -95,7 +98,8 @@ export interface Assignment {
   _id: string;
   bookingId: string | Booking;
   barberId: string;
-  status: 'OFFERED' | 'ACCEPTED' | 'REJECTED' | 'EN_ROUTE' | 'ARRIVED' | 'IN_PROGRESS' | 'COMPLETED' | 'CANCELLED_BY_CUSTOMER';
+  status: 'OFFERED' | 'ACCEPTED' | 'REJECTED' | 'EN_ROUTE' | 'ARRIVED' | 'IN_PROGRESS' | 'COMPLETED' | 'CANCELLED_BY_CUSTOMER' | 'CANCELLED_BY_BARBER';
+  cancellationReason?: string;
   offeredAt: string;
   expiresAt: string;
 }

@@ -22,6 +22,11 @@ export const BarberDashboard: React.FC<BarberDashboardProps> = ({ user }) => {
   const [rejectReason, setRejectReason] = useState('');
   const [rejecting, setRejecting] = useState(false);
 
+  // Active Job Barber Cancellation state
+  const [cancelActiveModalOpen, setCancelActiveModalOpen] = useState(false);
+  const [cancelActiveReason, setCancelActiveReason] = useState('');
+  const [cancellingActive, setCancellingActive] = useState(false);
+
   // OTP verification state
   const [otpDigits, setOtpDigits] = useState<string[]>(['', '', '', '', '', '']);
   const [otpError, setOtpError] = useState<string | null>(null);
@@ -117,6 +122,17 @@ export const BarberDashboard: React.FC<BarberDashboardProps> = ({ user }) => {
   const handleAcceptAssignment = async () => {
     if (!pendingAssignment) return;
     try {
+      if (pendingAssignment._id.startsWith('assign-')) {
+        // Simulated assignment
+        setActiveAssignment({
+          ...pendingAssignment,
+          status: 'ACCEPTED',
+        });
+        setPendingAssignment(null);
+        setStatusMessage('Job accepted (Simulation)! Proceed to client doorstep.');
+        return;
+      }
+
       const res = await assignmentApi.accept(pendingAssignment._id);
       setActiveAssignment(res);
       setPendingAssignment(null);
@@ -138,6 +154,15 @@ export const BarberDashboard: React.FC<BarberDashboardProps> = ({ user }) => {
     if (!pendingAssignment) return;
     setRejecting(true);
     try {
+      if (pendingAssignment._id.startsWith('assign-')) {
+        // Simulated offer - handle locally without invalid API call
+        setPendingAssignment(null);
+        setRejectModalOpen(false);
+        setRejectReason('');
+        setStatusMessage('Offer declined. Customer request returned to pool for other barbers.');
+        return;
+      }
+
       await assignmentApi.reject(
         pendingAssignment._id,
         rejectReason || 'Barber unavailable at the requested time',
@@ -145,12 +170,59 @@ export const BarberDashboard: React.FC<BarberDashboardProps> = ({ user }) => {
       setPendingAssignment(null);
       setRejectModalOpen(false);
       setRejectReason('');
-      setStatusMessage('Booking request rejected with reason.');
+      setStatusMessage('Booking request rejected. Customer booking is still active and reallocating to another barber.');
       await refreshDashboard();
     } catch (err: any) {
-      setStatusMessage(err?.response?.data?.error?.message || 'Failed to reject request');
+      if (pendingAssignment._id.startsWith('assign-')) {
+        setPendingAssignment(null);
+        setRejectModalOpen(false);
+        setRejectReason('');
+        setStatusMessage('Simulated offer dismissed.');
+      } else {
+        setStatusMessage(err?.response?.data?.error?.message || 'Failed to reject request');
+      }
     } finally {
       setRejecting(false);
+      setTimeout(() => setStatusMessage(null), 3500);
+    }
+  };
+
+  const handleCancelActiveSubmit = async () => {
+    if (!activeAssignment) return;
+    setCancellingActive(true);
+    try {
+      if (activeAssignment._id.startsWith('assign-')) {
+        setActiveAssignment(null);
+        setCancelActiveModalOpen(false);
+        setCancelActiveReason('');
+        setOtpVerified(false);
+        setShowOtpForm(false);
+        setStatusMessage('Job cancelled by you. Customer booking remains active and reallocates to another barber.');
+        return;
+      }
+
+      await assignmentApi.cancel(
+        activeAssignment._id,
+        cancelActiveReason || 'Barber cancelled service due to an emergency',
+      );
+      setActiveAssignment(null);
+      setCancelActiveModalOpen(false);
+      setCancelActiveReason('');
+      setOtpVerified(false);
+      setShowOtpForm(false);
+      setStatusMessage('Job cancelled by you. Customer service request is still preserved and reallocating to another barber.');
+      await refreshDashboard();
+    } catch (err: any) {
+      if (activeAssignment._id.startsWith('assign-')) {
+        setActiveAssignment(null);
+        setCancelActiveModalOpen(false);
+        setCancelActiveReason('');
+        setStatusMessage('Job cancelled.');
+      } else {
+        setStatusMessage(err?.response?.data?.error?.message || 'Failed to cancel job');
+      }
+    } finally {
+      setCancellingActive(false);
       setTimeout(() => setStatusMessage(null), 3500);
     }
   };
@@ -538,6 +610,21 @@ export const BarberDashboard: React.FC<BarberDashboardProps> = ({ user }) => {
                 3. Complete Job
               </button>
             </div>
+
+            {/* Barber Cancel Active Job Option */}
+            <div className="flex items-center justify-between pt-2 border-t border-white/5">
+              <span className="text-[11px] text-gray-400">
+                Facing an emergency or transport breakdown?
+              </span>
+              <button
+                type="button"
+                onClick={() => setCancelActiveModalOpen(true)}
+                className="px-3 py-1.5 rounded-xl bg-red-500/10 hover:bg-red-500/20 text-red-300 border border-red-500/30 text-xs font-bold transition-all flex items-center gap-1.5"
+              >
+                <XCircle className="w-3.5 h-3.5" />
+                Cancel Accepted Job
+              </button>
+            </div>
           </div>
         );
       })()}
@@ -762,6 +849,85 @@ export const BarberDashboard: React.FC<BarberDashboardProps> = ({ user }) => {
               >
                 {rejecting ? <Loader2 className="w-4 h-4 animate-spin" /> : <XCircle className="w-4 h-4" />}
                 Confirm Decline
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* ─── Cancel Active Accepted Job with Reason Modal ───────────────────── */}
+      {cancelActiveModalOpen && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/85 backdrop-blur-md animate-fade-in">
+          <div className="glass-card rounded-3xl p-6 md:p-8 w-full max-w-md border-red-500/40 space-y-5 text-left shadow-2xl">
+            <div className="flex items-center justify-between pb-3 border-b border-white/10">
+              <h3 className="text-lg font-bold text-white flex items-center gap-2">
+                <XCircle className="w-5 h-5 text-red-400" />
+                Cancel Accepted Service Job
+              </h3>
+              <button
+                onClick={() => setCancelActiveModalOpen(false)}
+                className="p-1 rounded-lg text-gray-400 hover:text-white"
+              >
+                <X className="w-5 h-5" />
+              </button>
+            </div>
+
+            <div className="p-3 rounded-2xl bg-amber-500/10 border border-amber-500/30 text-amber-200 text-xs leading-relaxed">
+              <strong>Note:</strong> Cancelling your accepted job will return the customer's request back to the system to find another nearby barber partner.
+            </div>
+
+            <p className="text-xs text-gray-300">
+              Select reason for emergency cancellation:
+            </p>
+
+            {/* Quick preset chips */}
+            <div className="flex flex-wrap gap-2">
+              {[
+                'Vehicle / Transport issue',
+                'Emergency medical situation',
+                'Customer address unreachable',
+                'Equipment / Grooming tool damage',
+                'Severe weather condition',
+              ].map((reasonChip) => (
+                <button
+                  key={reasonChip}
+                  type="button"
+                  onClick={() => setCancelActiveReason(reasonChip)}
+                  className={`px-3 py-1.5 rounded-xl text-[11px] font-semibold transition-all border ${
+                    cancelActiveReason === reasonChip
+                      ? 'bg-red-500/30 text-red-200 border-red-500/60 font-bold'
+                      : 'bg-obsidian-800/80 text-gray-400 border-white/5 hover:border-white/20'
+                  }`}
+                >
+                  {reasonChip}
+                </button>
+              ))}
+            </div>
+
+            <textarea
+              value={cancelActiveReason}
+              onChange={(e) => setCancelActiveReason(e.target.value)}
+              placeholder="Or write specific reason here..."
+              rows={3}
+              className="w-full p-3.5 rounded-2xl bg-obsidian-900 border border-white/10 text-xs text-white placeholder-gray-500 focus:border-red-500/60 outline-none"
+            />
+
+            <div className="grid grid-cols-2 gap-3 pt-2">
+              <button
+                type="button"
+                onClick={() => setCancelActiveModalOpen(false)}
+                className="py-3 rounded-xl bg-white/5 hover:bg-white/10 text-gray-300 text-xs font-bold border border-white/10"
+              >
+                Keep Job
+              </button>
+              <button
+                type="button"
+                onClick={handleCancelActiveSubmit}
+                disabled={cancellingActive}
+                className="py-3 rounded-xl bg-red-600 hover:bg-red-500 text-white text-xs font-bold transition-all flex items-center justify-center gap-2 shadow-lg shadow-red-600/30"
+              >
+                {cancellingActive ? <Loader2 className="w-4 h-4 animate-spin" /> : <XCircle className="w-4 h-4" />}
+                Confirm Cancel Job
               </button>
             </div>
           </div>

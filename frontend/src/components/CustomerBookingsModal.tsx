@@ -253,7 +253,7 @@ export const CustomerBookingsModal: React.FC<CustomerBookingsModalProps> = ({
                   </div>
 
                   {/* Card Footer with Actions */}
-                  <div className="flex items-center justify-between pt-1">
+                  <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-2 pt-1">
                     {b.status === 'CONFIRMED' && (
                       <span className="text-amber-300 text-xs font-semibold flex items-center gap-1.5">
                         <KeyRound className="w-3.5 h-3.5" />
@@ -271,11 +271,39 @@ export const CustomerBookingsModal: React.FC<CustomerBookingsModalProps> = ({
                     {b.status === 'CUSTOMER_CANCELLED' && (
                       <span className="text-red-400 text-xs font-semibold flex items-center gap-1.5">
                         <Ban className="w-3.5 h-3.5" />
-                        Cancelled by You
+                        Cancelled by You {b.cancellationReason ? `(${b.cancellationReason})` : ''}
                       </span>
                     )}
 
-                    <div className="ml-auto flex items-center gap-2">
+                    {b.status === 'ADMIN_CANCELLED' && (
+                      <span className="text-rose-400 text-xs font-semibold flex items-center gap-1.5">
+                        <Ban className="w-3.5 h-3.5" />
+                        Cancelled by Admin {b.cancellationReason ? `(${b.cancellationReason})` : ''}
+                      </span>
+                    )}
+
+                    {b.status === 'BARBER_CANCELLED' && (
+                      <span className="text-amber-400 text-xs font-semibold flex items-center gap-1.5">
+                        <RefreshCw className="w-3.5 h-3.5 animate-spin" />
+                        Previous barber unavailable • Finding new partner nearby...
+                      </span>
+                    )}
+
+                    {['PENDING', 'SEARCHING'].includes(b.status) && (
+                      <span className="text-purple-300 text-xs font-semibold flex items-center gap-1.5">
+                        <RefreshCw className="w-3.5 h-3.5 animate-spin" />
+                        Matching best doorstep barber...
+                      </span>
+                    )}
+
+                    {b.status === 'NO_BARBER_AVAILABLE' && (
+                      <span className="text-gray-400 text-xs font-semibold flex items-center gap-1.5">
+                        <Ban className="w-3.5 h-3.5" />
+                        No nearby partner available currently
+                      </span>
+                    )}
+
+                    <div className="sm:ml-auto flex items-center gap-2">
                       {isCancellable(b.status) && (
                         <button
                           onClick={() => handleCancelBooking(b._id)}
