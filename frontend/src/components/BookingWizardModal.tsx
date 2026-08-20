@@ -2,7 +2,7 @@ import React, { useState, useEffect } from 'react';
 import type { ServiceItem, BarberProfile, Booking } from '../types';
 import { bookingApi, barbersApi } from '../services/api';
 import { fetchLiveCoordinates, getCachedCoordinates } from '../services/location';
-import { X, AlertCircle, Sparkles, UserCheck, Scissors, Calendar, Clock, MapPin, Navigation, CheckCircle2 } from 'lucide-react';
+import { X, AlertCircle, Sparkles, UserCheck, Scissors, Calendar, Clock, MapPin, Navigation, Phone, Home, Compass } from 'lucide-react';
 
 interface BookingWizardModalProps {
   isOpen: boolean;
@@ -31,13 +31,17 @@ export const BookingWizardModal: React.FC<BookingWizardModalProps> = ({
 
   // Live real-time coordinates
   const initialCoords = getCachedCoordinates();
-  const [latitude, setLatitude] = useState<number>(initialCoords.latitude);
-  const [longitude, setLongitude] = useState<number>(initialCoords.longitude);
+  const [latitude, setLatitude] = useState<number>(initialCoords.latitude || 20.2961);
+  const [longitude, setLongitude] = useState<number>(initialCoords.longitude || 85.8245);
   const [locationLoading, setLocationLoading] = useState<boolean>(false);
   const [locationDetected, setLocationDetected] = useState<boolean>(false);
   const [formattedAddress, setFormattedAddress] = useState<string>('');
+  const [contactPhone, setContactPhone] = useState<string>('+91 ');
+  const [houseNumber, setHouseNumber] = useState<string>('');
+  const [landmark, setLandmark] = useState<string>('');
+  const [city, setCity] = useState<string>('Bhubaneswar');
+  const [postalCode, setPostalCode] = useState<string>('751024');
   const [addressDetails, setAddressDetails] = useState<{ city?: string; state?: string; country?: string }>({});
-  const [addressResolving, setAddressResolving] = useState<boolean>(false);
 
   const [availableBarbers, setAvailableBarbers] = useState<BarberProfile[]>([]);
   const [serviceId, setServiceId] = useState<string>('');
@@ -67,11 +71,11 @@ export const BookingWizardModal: React.FC<BookingWizardModalProps> = ({
   };
 
   const resolveAddressFromCoords = async (lat: number, lng: number) => {
-    setAddressResolving(true);
     try {
       const { reverseGeocode } = await import('../services/location');
       const addr = await reverseGeocode(lat, lng);
       setFormattedAddress(addr.formattedAddress);
+      if (addr.city) setCity(addr.city);
       setAddressDetails({
         city: addr.city,
         state: addr.state,
@@ -79,8 +83,6 @@ export const BookingWizardModal: React.FC<BookingWizardModalProps> = ({
       });
     } catch {
       // Keep default
-    } finally {
-      setAddressResolving(false);
     }
   };
 
@@ -155,6 +157,18 @@ export const BookingWizardModal: React.FC<BookingWizardModalProps> = ({
     // Enforce Zod rule: preferredBarberId required IF barberPreference === 'SPECIFIC'
     const finalPreference: 'ANY' | 'SPECIFIC' = (barberPreference === 'SPECIFIC' && validBarberId) ? 'SPECIFIC' : 'ANY';
 
+    // Build comprehensive formatted address
+    const constructedAddress = [
+      houseNumber,
+      landmark,
+      formattedAddress || city,
+      postalCode ? `PIN: ${postalCode}` : '',
+    ]
+      .filter(Boolean)
+      .join(', ');
+
+    const finalFormattedAddress = constructedAddress || formattedAddress || 'Doorstep Service Address';
+
     const payload = {
       serviceId: finalServiceId,
       scheduledDate,
@@ -167,9 +181,13 @@ export const BookingWizardModal: React.FC<BookingWizardModalProps> = ({
         longitude: Number(finalLng),
       },
       addressSnapshot: {
-        formattedAddress: formattedAddress || `Coordinates: ${Number(finalLat).toFixed(5)}, ${Number(finalLng).toFixed(5)}`,
-        city: addressDetails.city || 'Doorstep Service',
-        state: addressDetails.state || '',
+        formattedAddress: finalFormattedAddress,
+        houseNumber: houseNumber || '',
+        landmark: landmark || '',
+        postalCode: postalCode || '',
+        contactPhone: contactPhone || '',
+        city: city || addressDetails.city || 'Bhubaneswar',
+        state: addressDetails.state || 'Odisha',
         country: addressDetails.country || 'India',
       },
     };
@@ -181,7 +199,7 @@ export const BookingWizardModal: React.FC<BookingWizardModalProps> = ({
         setSearching(false);
         setLoading(false);
         onBookingCreated(newBooking);
-      }, 2500);
+      }, 1500);
     } catch (err: any) {
       setSearching(false);
       setLoading(false);
@@ -195,14 +213,14 @@ export const BookingWizardModal: React.FC<BookingWizardModalProps> = ({
 
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/85 backdrop-blur-xl animate-fade-in">
-      <div className="glass-card rounded-3xl w-full max-w-xl border-white/20 overflow-hidden shadow-2xl relative">
+      <div className="glass-card rounded-3xl w-full max-w-xl border-white/20 overflow-hidden shadow-2xl relative max-h-[92vh] flex flex-col">
         
         {/* Header */}
         <div className="px-6 py-4 border-b border-white/10 flex items-center justify-between bg-obsidian-900/80">
           <div className="flex items-center gap-2">
             <Sparkles className="w-5 h-5 text-amber-400" />
             <h3 className="text-lg font-bold font-outfit text-white">
-              {searching ? 'Finding Available Barber...' : 'Book Your Appointment'}
+              {searching ? 'Dispatching Your Booking...' : 'Doorstep Service & Address Details'}
             </h3>
           </div>
           {!searching && (
@@ -217,123 +235,135 @@ export const BookingWizardModal: React.FC<BookingWizardModalProps> = ({
 
         {searching ? (
           <div className="p-12 text-center space-y-6">
-            <div className="relative w-32 h-32 mx-auto flex items-center justify-center">
-              <div className="absolute inset-0 rounded-full border-2 border-purple-500/30 animate-radar-ping"></div>
-              <div className="absolute inset-2 rounded-full border-2 border-amber-500/30 animate-radar-ping [animation-delay:0.5s]"></div>
-              <div className="w-20 h-20 rounded-full gradient-purple flex items-center justify-center text-white shadow-xl shadow-purple-500/40 animate-pulse">
-                <Scissors className="w-10 h-10" />
-              </div>
+            <div className="relative w-28 h-28 mx-auto flex items-center justify-center">
+              <div className="absolute inset-0 rounded-full border-4 border-purple-500/20 border-t-purple-500 animate-spin"></div>
+              <Compass className="w-12 h-12 text-amber-400 animate-pulse" />
             </div>
-
-            <div className="space-y-2">
-              <h4 className="text-xl font-bold font-outfit text-white">Confirming Your Booking...</h4>
-              <p className="text-xs text-gray-400 max-w-sm mx-auto">
-                Connecting you with verified professional barbers in your area.
+            <div>
+              <h4 className="text-lg font-bold text-white">Connecting With Assigned Barber</h4>
+              <p className="text-xs text-gray-400 max-w-sm mx-auto mt-1">
+                Your GPS doorstep coordinates & contact details have been safely registered and sent.
               </p>
             </div>
           </div>
         ) : (
-          <div className="p-6 space-y-6">
+          <div className="p-6 overflow-y-auto space-y-6 flex-1">
             
+            {/* Step Indicators */}
+            <div className="grid grid-cols-3 gap-2">
+              {[
+                { s: 1, title: 'Service & Barber' },
+                { s: 2, title: 'Date & Time' },
+                { s: 3, title: 'Address & GPS' },
+              ].map((item) => (
+                <div
+                  key={item.s}
+                  onClick={() => setStep(item.s as any)}
+                  className={`p-2.5 rounded-xl border text-center cursor-pointer transition-all ${
+                    step === item.s
+                      ? 'bg-purple-600/20 border-purple-500 text-purple-300 shadow-md font-bold'
+                      : 'bg-obsidian-800/40 border-white/5 text-gray-500 hover:text-gray-300'
+                  }`}
+                >
+                  <span className="text-[10px] block font-mono">Step {item.s}</span>
+                  <span className="text-xs truncate block">{item.title}</span>
+                </div>
+              ))}
+            </div>
+
             {error && (
-              <div className="p-3.5 rounded-2xl bg-red-500/10 border border-red-500/30 text-red-300 text-xs flex items-center gap-2 animate-pulse">
-                <AlertCircle className="w-4 h-4 shrink-0 text-red-400" />
+              <div className="p-3.5 rounded-xl bg-red-500/10 border border-red-500/30 text-red-300 text-xs flex items-center gap-2">
+                <AlertCircle className="w-4 h-4 flex-shrink-0" />
                 <span>{error}</span>
               </div>
             )}
 
-            {/* Step Wizard Progress Bar */}
-            <div className="flex items-center justify-between text-xs font-bold text-gray-400 border-b border-white/10 pb-4">
-              <span className={step >= 1 ? 'text-purple-400 flex items-center gap-1' : ''}>
-                <Scissors className="w-3.5 h-3.5" /> 1. Service & Barber
-              </span>
-              <span className={step >= 2 ? 'text-purple-400 flex items-center gap-1' : ''}>
-                <Calendar className="w-3.5 h-3.5" /> 2. Date & Time
-              </span>
-              <span className={step >= 3 ? 'text-purple-400 flex items-center gap-1' : ''}>
-                <MapPin className="w-3.5 h-3.5" /> 3. Service Location
-              </span>
-            </div>
-
-            {/* Step 1: Service & Preference */}
+            {/* Step 1: Select Service & Barber */}
             {step === 1 && (
               <div className="space-y-4">
                 <div>
-                  <label className="block text-xs font-bold text-gray-300 uppercase tracking-wider mb-2">
-                    Select Grooming Service
+                  <label className="block text-xs font-bold text-gray-300 uppercase tracking-wider mb-2 flex items-center gap-1.5">
+                    <Scissors className="w-4 h-4 text-purple-400" />
+                    Select Service
                   </label>
-                  <select
-                    value={serviceId}
-                    onChange={(e) => setServiceId(e.target.value)}
-                    className="w-full glass-input px-4 py-3 rounded-2xl text-xs text-white"
-                  >
-                    {services.map((s) => (
-                      <option key={s._id} value={s._id} className="bg-obsidian-900 text-white">
-                        {s.name} (₹{s.price} • {s.durationMinutes}m)
-                      </option>
+                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-2.5 max-h-48 overflow-y-auto pr-1">
+                    {services.map((srv) => (
+                      <div
+                        key={srv._id}
+                        onClick={() => setServiceId(srv._id)}
+                        className={`p-3 rounded-2xl border cursor-pointer transition-all flex items-center justify-between ${
+                          serviceId === srv._id
+                            ? 'bg-purple-600/20 border-purple-500 text-white shadow-lg shadow-purple-500/10'
+                            : 'bg-obsidian-800/60 border-white/5 text-gray-300 hover:bg-obsidian-800'
+                        }`}
+                      >
+                        <div className="min-w-0 pr-2">
+                          <h4 className="font-bold text-xs truncate">{srv.name}</h4>
+                          <span className="text-[10px] text-gray-400">{srv.durationMinutes} mins</span>
+                        </div>
+                        <span className="text-amber-400 font-extrabold text-xs">₹{srv.price}</span>
+                      </div>
                     ))}
-                    {services.length === 0 && (
-                      <option value="6a8481e6197f75be106a931e" className="bg-obsidian-900 text-white">
-                        Executive Haircut & Styling (₹499 • 45m)
-                      </option>
-                    )}
-                  </select>
-                </div>
-
-                <label className="block text-xs font-bold text-gray-300 uppercase tracking-wider pt-2">
-                  Barber Preference
-                </label>
-                <div className="grid grid-cols-2 gap-3">
-                  <button
-                    type="button"
-                    onClick={() => setBarberPreference('ANY')}
-                    className={`p-3.5 rounded-2xl border text-xs font-bold flex items-center justify-center gap-2 transition-all ${
-                      barberPreference === 'ANY'
-                        ? 'bg-purple-600/20 border-purple-500 text-purple-300 shadow-md'
-                        : 'bg-obsidian-800/50 border-white/10 text-gray-400 hover:text-white'
-                    }`}
-                  >
-                    <UserCheck className="w-4 h-4 text-purple-400" />
-                    Any Available Barber (Fastest)
-                  </button>
-
-                  <button
-                    type="button"
-                    onClick={() => setBarberPreference('SPECIFIC')}
-                    className={`p-3.5 rounded-2xl border text-xs font-bold flex items-center justify-center gap-2 transition-all ${
-                      barberPreference === 'SPECIFIC'
-                        ? 'bg-amber-500/20 border-amber-500 text-amber-300 shadow-md'
-                        : 'bg-obsidian-800/50 border-white/10 text-gray-400 hover:text-white'
-                    }`}
-                  >
-                    <Scissors className="w-4 h-4 text-amber-400" />
-                    Choose Specific Barber
-                  </button>
-                </div>
-
-                {barberPreference === 'SPECIFIC' && (
-                  <div className="pt-2 animate-fade-in">
-                    <label className="block text-xs font-bold text-amber-400 uppercase tracking-wider mb-2">
-                      Select Preferred Barber
-                    </label>
-                    <select
-                      value={preferredBarberId}
-                      onChange={(e) => setPreferredBarberId(e.target.value)}
-                      className="w-full glass-input px-4 py-3 rounded-2xl text-xs text-white border-amber-500/40"
-                    >
-                      {availableBarbers.map((b) => (
-                        <option key={b._id} value={b._id} className="bg-obsidian-900 text-white">
-                          {b.user?.name || 'Barber Pro'} ({b.rating} ★ • {b.experienceYears}y exp)
-                        </option>
-                      ))}
-                      {availableBarbers.length === 0 && (
-                        <option value="6a8481e6197f75be106a932a" className="bg-obsidian-900 text-white">
-                          Amit Kumar (4.4 ★ • ~1.2 km away)
-                        </option>
-                      )}
-                    </select>
                   </div>
-                )}
+                </div>
+
+                <div>
+                  <label className="block text-xs font-bold text-gray-300 uppercase tracking-wider mb-2 flex items-center gap-1.5">
+                    <UserCheck className="w-4 h-4 text-purple-400" />
+                    Preferred Partner Barber
+                  </label>
+                  <div className="space-y-2">
+                    <div
+                      onClick={() => {
+                        setBarberPreference('ANY');
+                        setPreferredBarberId('');
+                      }}
+                      className={`p-3 rounded-2xl border cursor-pointer transition-all flex items-center justify-between ${
+                        barberPreference === 'ANY'
+                          ? 'bg-purple-600/20 border-purple-500 text-white shadow-md'
+                          : 'bg-obsidian-800/60 border-white/5 text-gray-400 hover:text-gray-200'
+                      }`}
+                    >
+                      <div className="flex items-center gap-2.5">
+                        <Sparkles className="w-4 h-4 text-amber-400" />
+                        <div>
+                          <span className="text-xs font-bold block text-white">Assign via Salon Admin</span>
+                          <span className="text-[10px] text-gray-400">Admin reviews and assigns available partner</span>
+                        </div>
+                      </div>
+                    </div>
+
+                    {availableBarbers.map((b) => (
+                      <div
+                        key={b._id}
+                        onClick={() => {
+                          setBarberPreference('SPECIFIC');
+                          setPreferredBarberId(b._id);
+                        }}
+                        className={`p-3 rounded-2xl border cursor-pointer transition-all flex items-center justify-between ${
+                          barberPreference === 'SPECIFIC' && preferredBarberId === b._id
+                            ? 'bg-purple-600/20 border-purple-500 text-white shadow-md'
+                            : 'bg-obsidian-800/60 border-white/5 text-gray-300 hover:bg-obsidian-800'
+                        }`}
+                      >
+                        <div className="flex items-center gap-2.5">
+                          <div className="w-8 h-8 rounded-xl gradient-purple flex items-center justify-center text-white text-xs font-bold">
+                            {b.user?.name?.charAt(0) || 'B'}
+                          </div>
+                          <div>
+                            <span className="text-xs font-bold block text-white">{b.user?.name || 'Partner Barber'}</span>
+                            <span className="text-[10px] text-gray-400">
+                              {b.rating || 4.8}★ • {b.totalCompletedJobs || 0} completed
+                            </span>
+                          </div>
+                        </div>
+                        {b.distanceKm !== undefined && (
+                          <span className="text-[10px] font-mono text-purple-300">{b.distanceKm.toFixed(1)} km away</span>
+                        )}
+                      </div>
+                    ))}
+                  </div>
+                </div>
               </div>
             )}
 
@@ -341,12 +371,13 @@ export const BookingWizardModal: React.FC<BookingWizardModalProps> = ({
             {step === 2 && (
               <div className="space-y-4">
                 <div>
-                  <label className="block text-xs font-bold text-gray-300 uppercase tracking-wider mb-2 flex items-center gap-1.5">
+                  <label className="block text-xs font-bold text-gray-300 uppercase tracking-wider mb-1 flex items-center gap-1.5">
                     <Calendar className="w-4 h-4 text-purple-400" />
-                    Select Appointment Date
+                    Appointment Date
                   </label>
                   <input
                     type="date"
+                    required
                     value={scheduledDate}
                     onChange={(e) => setScheduledDate(e.target.value)}
                     className="w-full glass-input px-4 py-3 rounded-2xl text-xs text-white"
@@ -354,12 +385,13 @@ export const BookingWizardModal: React.FC<BookingWizardModalProps> = ({
                 </div>
 
                 <div>
-                  <label className="block text-xs font-bold text-gray-300 uppercase tracking-wider mb-2 flex items-center gap-1.5">
+                  <label className="block text-xs font-bold text-gray-300 uppercase tracking-wider mb-1 flex items-center gap-1.5">
                     <Clock className="w-4 h-4 text-purple-400" />
-                    Select Start Time
+                    Service Start Time
                   </label>
                   <input
                     type="time"
+                    required
                     value={startTime}
                     onChange={(e) => setStartTime(e.target.value)}
                     className="w-full glass-input px-4 py-3 rounded-2xl text-xs text-white"
@@ -368,82 +400,115 @@ export const BookingWizardModal: React.FC<BookingWizardModalProps> = ({
               </div>
             )}
 
-            {/* Step 3: Location */}
+            {/* Step 3: Location & Complete Doorstep Address */}
             {step === 3 && (
               <div className="space-y-4">
-                <div className="flex items-center justify-between">
-                  <label className="block text-xs font-bold text-gray-300 uppercase tracking-wider flex items-center gap-1.5">
-                    <MapPin className="w-4 h-4 text-purple-400" />
-                    Service Delivery Location Coordinates
+                
+                {/* Contact Phone */}
+                <div>
+                  <label className="block text-[11px] font-bold text-gray-300 uppercase tracking-wider mb-1 flex items-center gap-1.5">
+                    <Phone className="w-3.5 h-3.5 text-amber-400" />
+                    Contact Mobile Number (For Barber Communication)
                   </label>
-                  <button
-                    type="button"
-                    onClick={requestLiveLocation}
-                    disabled={locationLoading}
-                    className="text-[11px] text-purple-300 hover:text-white bg-purple-600/30 hover:bg-purple-600/50 px-3 py-1.5 rounded-xl border border-purple-500/40 flex items-center gap-1.5 transition-all shadow-sm"
-                  >
-                    <Navigation className={`w-3.5 h-3.5 text-purple-400 ${locationLoading ? 'animate-spin' : ''}`} />
-                    {locationLoading ? 'Detecting GPS...' : 'Detect Live GPS'}
-                  </button>
+                  <input
+                    type="tel"
+                    required
+                    placeholder="+91 98765 43210"
+                    value={contactPhone}
+                    onChange={(e) => setContactPhone(e.target.value)}
+                    className="w-full glass-input px-4 py-2.5 rounded-2xl text-xs text-white font-medium placeholder-gray-500"
+                  />
+                </div>
+
+                {/* Structured Doorstep Address Inputs */}
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                  <div>
+                    <label className="block text-[10px] font-bold text-gray-400 uppercase tracking-wider mb-1 flex items-center gap-1">
+                      <Home className="w-3 h-3 text-purple-400" />
+                      Flat / House / Door No. & Apartment
+                    </label>
+                    <input
+                      type="text"
+                      placeholder="e.g. Flat 402, Royal Palms"
+                      value={houseNumber}
+                      onChange={(e) => setHouseNumber(e.target.value)}
+                      className="w-full glass-input px-3.5 py-2.5 rounded-2xl text-xs text-white placeholder-gray-500"
+                    />
+                  </div>
+
+                  <div>
+                    <label className="block text-[10px] font-bold text-gray-400 uppercase tracking-wider mb-1">
+                      Street / Landmark / Area
+                    </label>
+                    <input
+                      type="text"
+                      placeholder="e.g. Near Infocity, Patia"
+                      value={landmark}
+                      onChange={(e) => setLandmark(e.target.value)}
+                      className="w-full glass-input px-3.5 py-2.5 rounded-2xl text-xs text-white placeholder-gray-500"
+                    />
+                  </div>
                 </div>
 
                 <div className="grid grid-cols-2 gap-3">
                   <div>
-                    <span className="text-[10px] text-gray-400 block mb-1">Latitude (Doorstep GPS)</span>
+                    <label className="block text-[10px] font-bold text-gray-400 uppercase tracking-wider mb-1">
+                      City
+                    </label>
                     <input
-                      type="number"
-                      step="any"
-                      required
-                      value={latitude}
-                      onChange={(e) => setLatitude(Number(e.target.value))}
-                      className="w-full glass-input px-3 py-2.5 rounded-2xl text-xs text-white"
+                      type="text"
+                      placeholder="Bhubaneswar"
+                      value={city}
+                      onChange={(e) => setCity(e.target.value)}
+                      className="w-full glass-input px-3.5 py-2.5 rounded-2xl text-xs text-white placeholder-gray-500"
                     />
                   </div>
+
                   <div>
-                    <span className="text-[10px] text-gray-400 block mb-1">Longitude (Doorstep GPS)</span>
+                    <label className="block text-[10px] font-bold text-gray-400 uppercase tracking-wider mb-1">
+                      PIN / Postal Code
+                    </label>
                     <input
-                      type="number"
-                      step="any"
-                      required
-                      value={longitude}
-                      onChange={(e) => setLongitude(Number(e.target.value))}
-                      className="w-full glass-input px-3 py-2.5 rounded-2xl text-xs text-white"
+                      type="text"
+                      placeholder="751024"
+                      value={postalCode}
+                      onChange={(e) => setPostalCode(e.target.value)}
+                      className="w-full glass-input px-3.5 py-2.5 rounded-2xl text-xs text-white placeholder-gray-500"
                     />
                   </div>
                 </div>
 
-                {/* Doorstep Address Display / Editable */}
-                <div>
-                  <label className="block text-[10px] text-gray-400 font-bold uppercase tracking-wider mb-1 flex items-center justify-between">
-                    <span>Doorstep Delivery Address</span>
-                    {addressResolving && (
-                      <span className="text-purple-400 text-[10px] flex items-center gap-1">
-                        <Navigation className="w-3 h-3 animate-spin" /> Resolving address...
+                {/* Auto-detected GPS Coordinates & Reverse Geocoded Preview */}
+                <div className="pt-2 border-t border-white/10 space-y-2">
+                  <div className="flex items-center justify-between">
+                    <span className="text-[10px] text-gray-400 font-bold uppercase tracking-wider flex items-center gap-1">
+                      <MapPin className="w-3 h-3 text-purple-400" />
+                      Live GPS Sync
+                    </span>
+                    <button
+                      type="button"
+                      onClick={requestLiveLocation}
+                      disabled={locationLoading}
+                      className="text-[10px] text-purple-300 hover:text-white bg-purple-600/30 hover:bg-purple-600/50 px-2.5 py-1 rounded-xl border border-purple-500/40 flex items-center gap-1 transition-all"
+                    >
+                      <Navigation className={`w-3 h-3 text-purple-400 ${locationLoading ? 'animate-spin' : ''}`} />
+                      {locationLoading ? 'Detecting GPS...' : 'Refresh Live GPS'}
+                    </button>
+                  </div>
+
+                  <div className="p-3 rounded-2xl bg-black/30 border border-white/5 text-[11px] text-gray-300 space-y-1">
+                    <div className="flex items-center justify-between text-gray-400 text-[10px]">
+                      <span>Coordinates: {latitude?.toFixed(4)}, {longitude?.toFixed(4)}</span>
+                      <span className="text-emerald-400 font-mono">
+                        {locationDetected ? '✅ GPS Detected' : '📍 City Coords Ready'}
                       </span>
+                    </div>
+                    {formattedAddress && (
+                      <p className="text-gray-300 line-clamp-2 mt-0.5">{formattedAddress}</p>
                     )}
-                  </label>
-                  <input
-                    type="text"
-                    required
-                    placeholder="Enter your flat/house no, street, landmark..."
-                    value={formattedAddress}
-                    onChange={(e) => setFormattedAddress(e.target.value)}
-                    className="w-full glass-input px-4 py-2.5 rounded-2xl text-xs text-white"
-                  />
-                  <span className="text-[10px] text-gray-400 mt-1 block">
-                    Auto-detected via live GPS coordinates. Edit or add flat/apartment details if needed.
-                  </span>
+                  </div>
                 </div>
 
-                <div className="p-3.5 rounded-2xl bg-purple-500/10 border border-purple-500/20 text-purple-200 text-xs flex items-center justify-between">
-                  <div className="flex items-center gap-2">
-                    <CheckCircle2 className="w-4 h-4 text-emerald-400 shrink-0" />
-                    <span>Real-time GPS & address will be dispatched to your assigned barber.</span>
-                  </div>
-                  <span className="text-[10px] text-emerald-400 font-mono font-bold bg-emerald-500/10 px-2 py-0.5 rounded-lg border border-emerald-500/30">
-                    Live GPS Sync
-                  </span>
-                </div>
               </div>
             )}
 

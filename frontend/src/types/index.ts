@@ -58,6 +58,10 @@ export type BookingStatus =
 
 export interface AddressSnapshot {
   formattedAddress?: string;
+  houseNumber?: string;
+  landmark?: string;
+  postalCode?: string;
+  contactPhone?: string;
   city?: string;
   state?: string;
   country?: string;

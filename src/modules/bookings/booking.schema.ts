@@ -13,6 +13,10 @@ export const createBookingSchema = z.object({
   }),
   addressSnapshot: z.object({
     formattedAddress: z.string().optional(),
+    houseNumber: z.string().optional(),
+    landmark: z.string().optional(),
+    postalCode: z.string().optional(),
+    contactPhone: z.string().optional(),
     city: z.string().optional(),
     state: z.string().optional(),
     country: z.string().optional(),

@@ -391,13 +391,15 @@ export const BarberDashboard: React.FC<BarberDashboardProps> = ({ user }) => {
       {activeAssignment && (() => {
         const booking = typeof activeAssignment.bookingId === 'object' ? (activeAssignment.bookingId as any) : null;
         const customer = booking?.customerId && typeof booking.customerId === 'object' ? booking.customerId : null;
-        const customerName = customer?.name || 'Customer';
-        const customerPhone = customer?.phone || '';
+        const customerName = customer?.name || 'Valued Customer';
+        const customerPhone = booking?.addressSnapshot?.contactPhone || customer?.phone || '+91 98765 43210';
+        const houseNo = booking?.addressSnapshot?.houseNumber || '';
+        const landmark = booking?.addressSnapshot?.landmark || '';
         const coords = booking?.customerLocation?.coordinates || [longitude, latitude];
         const formattedAddr = booking?.addressSnapshot?.formattedAddress || `GPS Coordinates: ${coords[1]?.toFixed(5)}, ${coords[0]?.toFixed(5)}`;
         const googleMapsUrl = `https://www.google.com/maps/dir/?api=1&destination=${coords[1]},${coords[0]}`;
         const serviceName = booking?.serviceSnapshot?.name || 'Haircut & Styling';
-        const price = booking?.serviceSnapshot?.price || 300;
+        const price = booking?.serviceSnapshot?.price || 399;
         const scheduledTime = booking ? `${booking.scheduledDate} at ${booking.startTime}` : 'Today at 14:00';
         const bookingNumber = booking?.bookingNumber || 'BK-ACTIVE';
 
@@ -411,7 +413,7 @@ export const BarberDashboard: React.FC<BarberDashboardProps> = ({ user }) => {
                   <h3 className="text-xl font-extrabold font-outfit text-white flex items-center gap-2">
                     Active Service Job <span className="text-purple-400 text-sm font-mono font-normal">#{bookingNumber}</span>
                   </h3>
-                  <span className="text-xs text-gray-400">Doorstep grooming dispatch assigned to you</span>
+                  <span className="text-xs text-gray-400">Accepted by you • Customer details & doorstep GPS unlocked</span>
                 </div>
               </div>
               <span className="px-3.5 py-1 rounded-full bg-purple-500/20 border border-purple-500/40 text-purple-300 text-xs font-bold uppercase tracking-wider">
@@ -428,18 +430,20 @@ export const BarberDashboard: React.FC<BarberDashboardProps> = ({ user }) => {
                     {customerName.charAt(0)}
                   </div>
                   <div>
-                    <span className="text-[10px] text-gray-400 uppercase font-semibold tracking-wider block">Customer Name</span>
+                    <span className="text-[10px] text-gray-400 uppercase font-semibold tracking-wider block">Customer Contact</span>
                     <h4 className="text-base font-bold text-white flex items-center gap-2">
                       {customerName}
                     </h4>
                     {customerPhone && (
-                      <a
-                        href={`tel:${customerPhone}`}
-                        className="text-xs text-purple-300 hover:text-purple-200 flex items-center gap-1.5 mt-0.5"
-                      >
-                        <Phone className="w-3.5 h-3.5 text-purple-400" />
-                        <span>{customerPhone}</span>
-                      </a>
+                      <div className="flex items-center gap-2 mt-1">
+                        <a
+                          href={`tel:${customerPhone.replace(/\s+/g, '')}`}
+                          className="px-3 py-1 rounded-xl bg-purple-600/30 hover:bg-purple-600/60 text-purple-200 hover:text-white border border-purple-500/40 text-xs font-bold flex items-center gap-1.5 transition-all shadow-sm"
+                        >
+                          <Phone className="w-3.5 h-3.5 text-purple-400" />
+                          <span>Call {customerPhone}</span>
+                        </a>
+                      </div>
                     )}
                   </div>
                 </div>
@@ -460,13 +464,19 @@ export const BarberDashboard: React.FC<BarberDashboardProps> = ({ user }) => {
               {/* Right Column: Doorstep Address & Navigation */}
               <div className="space-y-3.5 flex flex-col justify-between border-t lg:border-t-0 lg:border-l border-white/10 lg:pl-6 pt-4 lg:pt-0">
                 <div>
-                  <span className="text-[10px] text-gray-400 uppercase font-semibold tracking-wider block mb-1 flex items-center gap-1">
+                  <span className="text-[10px] text-gray-400 uppercase font-semibold tracking-wider mb-1 flex items-center gap-1">
                     <MapPin className="w-3.5 h-3.5 text-purple-400" />
-                    Customer Doorstep Address
+                    Complete Doorstep Delivery Address
                   </span>
-                  <p className="text-xs text-gray-200 leading-relaxed font-medium bg-black/30 p-3 rounded-xl border border-white/5">
-                    {formattedAddr}
-                  </p>
+                  <div className="text-xs text-gray-200 leading-relaxed font-medium bg-black/30 p-3 rounded-xl border border-white/5 space-y-1">
+                    {houseNo && (
+                      <span className="block font-bold text-purple-300">🏠 {houseNo}</span>
+                    )}
+                    {landmark && (
+                      <span className="block text-gray-400 text-[11px]">📍 Landmark: {landmark}</span>
+                    )}
+                    <p className="text-gray-300 text-[11px]">{formattedAddr}</p>
+                  </div>
                 </div>
 
                 <a

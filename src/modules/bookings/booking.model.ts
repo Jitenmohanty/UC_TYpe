@@ -97,6 +97,10 @@ const bookingSchema = new Schema<IBooking>(
     },
     addressSnapshot: {
       formattedAddress: String,
+      houseNumber: String,
+      landmark: String,
+      postalCode: String,
+      contactPhone: String,
       city: String,
       state: String,
       country: String,
