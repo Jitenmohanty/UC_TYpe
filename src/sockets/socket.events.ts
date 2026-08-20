@@ -16,6 +16,7 @@ export const SocketEvents = {
   ASSIGNMENT_NEW: 'assignment:new',
   ASSIGNMENT_EXPIRED: 'assignment:expired',
   ASSIGNMENT_CANCELLED: 'assignment:cancelled',
+  BARBER_LOCATION_UPDATED: 'barber:location_updated',
 } as const;
 
 export type SocketEvent = (typeof SocketEvents)[keyof typeof SocketEvents];

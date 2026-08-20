@@ -15,6 +15,11 @@ const assignmentIdSchema = z.object({
   assignmentId: z.string().regex(/^[0-9a-fA-F]{24}$/, 'Invalid assignment ID'),
 });
 
+assignmentRoutes.get(
+  '/pending',
+  assignmentController.getPendingAssignment,
+);
+
 assignmentRoutes.post(
   '/:assignmentId/accept',
   validate({ params: assignmentIdSchema }),
@@ -28,6 +33,12 @@ assignmentRoutes.post(
     body: z.object({ reason: z.string().max(500).optional() }),
   }),
   assignmentController.rejectAssignment,
+);
+
+assignmentRoutes.post(
+  '/:assignmentId/start-journey',
+  validate({ params: assignmentIdSchema }),
+  assignmentController.startJourney,
 );
 
 assignmentRoutes.post(
@@ -47,6 +58,12 @@ assignmentRoutes.post(
 
 assignmentRoutes.post(
   '/:assignmentId/start',
+  validate({ params: assignmentIdSchema }),
+  assignmentController.startAssignment,
+);
+
+assignmentRoutes.post(
+  '/:assignmentId/start-service',
   validate({ params: assignmentIdSchema }),
   assignmentController.startAssignment,
 );

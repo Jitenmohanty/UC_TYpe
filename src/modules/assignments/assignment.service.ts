@@ -434,6 +434,43 @@ export class AssignmentService {
 
     return { message: 'Service completed', bookingId: booking._id.toString() };
   }
+
+  async getPendingOrActiveAssignment(barberUserId: Types.ObjectId) {
+    const profile = await barberProfileRepository.findByUserId(barberUserId);
+    const barberIds: (Types.ObjectId | string)[] = [barberUserId];
+    if (profile) barberIds.push(profile._id);
+
+    const assignment = await assignmentRepository.findPendingOrActiveByBarber(barberIds);
+    return assignment;
+  }
+
+  async startJourney(assignmentId: string, barberId: Types.ObjectId) {
+    const assignment = await assignmentRepository.findById(assignmentId);
+    if (!assignment) throw new NotFoundError('Assignment');
+    if (!(await this.isBarberOwner(assignment.barberId, barberId))) throw new ForbiddenError();
+
+    const booking = await bookingRepository.findByIdLean(assignment.bookingId as Types.ObjectId);
+    if (!booking) throw new NotFoundError('Booking');
+
+    // Update assignment status if possible
+    await assignmentRepository.updateStatus(assignment._id, 'EN_ROUTE' as AssignmentStatus);
+
+    emitToUser(booking.customerId.toString(), SocketEvents.BARBER_LOCATION_UPDATED, {
+      bookingId: booking._id.toString(),
+      status: 'EN_ROUTE',
+      message: 'Barber is on the way to your doorstep',
+    });
+
+    await auditService.log({
+      actorId: barberId,
+      actorRole: UserRole.BARBER,
+      action: 'BARBER_STARTED_JOURNEY',
+      entityType: 'Assignment',
+      entityId: assignmentId,
+    });
+
+    return { message: 'Journey started', bookingId: booking._id.toString(), status: 'EN_ROUTE' };
+  }
 }
 
 export const assignmentService = new AssignmentService();

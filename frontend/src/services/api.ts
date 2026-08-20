@@ -189,3 +189,39 @@ export const assignmentApi = {
     return res.data.data;
   },
 };
+
+// Admin API
+export const adminApi = {
+  getBookings: async (params?: { page?: number; limit?: number; status?: string }) => {
+    const res = await api.get('/admin/bookings', { params });
+    return res.data.data;
+  },
+  getBarbers: async (params?: { page?: number; limit?: number }) => {
+    const res = await api.get('/admin/barbers', { params });
+    return res.data.data;
+  },
+  updateBarberStatus: async (barberId: string, status: 'ACTIVE' | 'INACTIVE' | 'SUSPENDED') => {
+    const res = await api.patch(`/admin/barbers/${barberId}/status`, { status });
+    return res.data.data;
+  },
+  manualAssign: async (bookingId: string, barberId: string) => {
+    const res = await api.post(`/admin/bookings/${bookingId}/assign`, { barberId });
+    return res.data.data;
+  },
+  reallocate: async (bookingId: string) => {
+    const res = await api.post(`/admin/bookings/${bookingId}/reallocate`);
+    return res.data.data;
+  },
+  cancelBooking: async (bookingId: string, reason?: string) => {
+    const res = await api.post(`/admin/bookings/${bookingId}/cancel`, { reason });
+    return res.data.data;
+  },
+  getAllocationFailures: async (params?: { page?: number; limit?: number }) => {
+    const res = await api.get('/admin/allocation-failures', { params });
+    return res.data.data;
+  },
+  getAuditLogs: async (params?: { page?: number; limit?: number }) => {
+    const res = await api.get('/admin/audit-logs', { params });
+    return res.data.data;
+  },
+};

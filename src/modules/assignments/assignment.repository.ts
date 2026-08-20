@@ -37,6 +37,19 @@ export class AssignmentRepository {
       .exec();
   }
 
+  async findPendingOrActiveByBarber(barberIds: (Types.ObjectId | string)[]): Promise<IAssignment | null> {
+    return AssignmentModel.findOne({
+      barberId: { $in: barberIds },
+      status: { $in: [AssignmentStatus.OFFERED, AssignmentStatus.ACCEPTED, 'EN_ROUTE', 'ARRIVED', 'IN_PROGRESS'] },
+    })
+      .populate({
+        path: 'bookingId',
+        populate: { path: 'customerId', select: 'name email phone' },
+      })
+      .sort({ createdAt: -1 })
+      .exec();
+  }
+
   async updateStatus(
     assignmentId: Types.ObjectId | string,
     status: AssignmentStatus,

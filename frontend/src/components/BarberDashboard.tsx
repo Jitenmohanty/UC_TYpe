@@ -29,6 +29,10 @@ export const BarberDashboard: React.FC<BarberDashboardProps> = ({ user }) => {
       .then((data) => {
         setProfile(data);
         setAutoAllocation(data.autoAllocationEnabled);
+        if (data.currentLocation?.coordinates) {
+          setLongitude(data.currentLocation.coordinates[0]);
+          setLatitude(data.currentLocation.coordinates[1]);
+        }
       })
       .catch(() => {
         setProfile({
@@ -42,6 +46,21 @@ export const BarberDashboard: React.FC<BarberDashboardProps> = ({ user }) => {
           serviceRadiusKm: 10,
         });
       });
+
+    // Fetch initial active or pending assignment from backend
+    assignmentApi.getPending()
+      .then((assignment) => {
+        if (!assignment) return;
+        if (assignment.status === 'OFFERED') {
+          setPendingAssignment(assignment);
+        } else if (['ACCEPTED', 'EN_ROUTE', 'ARRIVED', 'IN_PROGRESS'].includes(assignment.status)) {
+          setActiveAssignment(assignment);
+          if (assignment.status === 'ARRIVED') {
+            setShowOtpForm(true);
+          }
+        }
+      })
+      .catch(() => {});
   }, [user]);
 
   useEffect(() => {

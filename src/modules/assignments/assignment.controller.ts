@@ -31,6 +31,16 @@ export const startAssignment = asyncHandler(async (req: Request, res: Response) 
   sendSuccess(res, result, 'Service started');
 });
 
+export const getPendingAssignment = asyncHandler(async (req: Request, res: Response) => {
+  const result = await assignmentService.getPendingOrActiveAssignment(req.user!.userId);
+  sendSuccess(res, result);
+});
+
+export const startJourney = asyncHandler(async (req: Request, res: Response) => {
+  const result = await assignmentService.startJourney(req.params['assignmentId']!, req.user!.userId);
+  sendSuccess(res, result, 'Journey started');
+});
+
 export const completeAssignment = asyncHandler(async (req: Request, res: Response) => {
   const result = await assignmentService.completeAssignment(req.params['assignmentId']!, req.user!.userId);
   sendSuccess(res, result, 'Service completed');
