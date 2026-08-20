@@ -77,6 +77,20 @@ export class BookingService {
         allocationAttempt: 1,
       });
       logger.info({ msg: 'Direct assignment created for preferred barber', bookingId: booking._id.toString(), barberId: input.preferredBarberId });
+    } else {
+      // Trigger automatic allocation for ANY preference
+      try {
+        await allocationQueue.add('allocate-booking', {
+          bookingId: booking._id.toString(),
+          attemptNumber: 1,
+        });
+      } catch {
+        // Direct allocation fallback if queue is inactive
+        const { allocationService } = await import('../allocation/allocation.service');
+        allocationService.allocateBooking(booking._id.toString(), 1).catch((err) => {
+          logger.error({ msg: 'Inline allocation fallback error', error: err?.message });
+        });
+      }
     }
 
     await auditService.log({

@@ -114,7 +114,9 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({ user }) => {
   }, 0);
 
   const completedJobsCount = bookings.filter((b) => b.status === 'COMPLETED').length;
-  const pendingBookings = bookings.filter((b) => ['PENDING', 'SEARCHING'].includes(b.status));
+  const pendingBookings = bookings.filter((b) =>
+    ['PENDING', 'SEARCHING', 'OFFERED', 'BARBER_CANCELLED', 'NO_BARBER_AVAILABLE'].includes(b.status)
+  );
   const activeBarbers = barbers.filter((b) => (b as any).status !== 'INACTIVE');
 
   return (
@@ -327,18 +329,29 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({ user }) => {
                       ))}
                     </select>
 
-                    <button
-                      onClick={() => handleAssignBarber(b._id)}
-                      disabled={assigningBookingId === b._id || !currentChoice}
-                      className={`w-full sm:w-auto px-4 py-2.5 rounded-xl text-xs font-bold transition-all flex items-center justify-center gap-1.5 shadow-md shrink-0 ${
-                        assigningBookingId === b._id || !currentChoice
-                          ? 'bg-white/10 text-gray-500 cursor-not-allowed'
-                          : 'gradient-gold hover:opacity-95 text-black shadow-amber-500/20 active:scale-95'
-                      }`}
-                    >
-                      <UserCheck className="w-3.5 h-3.5" />
-                      <span>{assigningBookingId === b._id ? 'Allocating...' : 'Allocate Barber'}</span>
-                    </button>
+                    <div className="flex items-center gap-2 w-full sm:w-auto">
+                      <button
+                        onClick={() => handleAssignBarber(b._id)}
+                        disabled={assigningBookingId === b._id || !currentChoice}
+                        className={`flex-1 sm:flex-initial px-4 py-2.5 rounded-xl text-xs font-bold transition-all flex items-center justify-center gap-1.5 shadow-md shrink-0 ${
+                          assigningBookingId === b._id || !currentChoice
+                            ? 'bg-white/10 text-gray-500 cursor-not-allowed'
+                            : 'gradient-gold hover:opacity-95 text-black shadow-amber-500/20 active:scale-95'
+                        }`}
+                      >
+                        <UserCheck className="w-3.5 h-3.5" />
+                        <span>{assigningBookingId === b._id ? 'Allocating...' : 'Allocate Barber'}</span>
+                      </button>
+
+                      <button
+                        onClick={() => handleOpenCancelModal(b._id)}
+                        className="px-3 py-2.5 rounded-xl bg-red-500/10 hover:bg-red-500/20 text-red-300 border border-red-500/30 text-xs font-bold transition-all flex items-center justify-center gap-1 shrink-0"
+                        title="Cancel this pending booking"
+                      >
+                        <Ban className="w-3.5 h-3.5" />
+                        <span>Cancel</span>
+                      </button>
+                    </div>
                   </div>
                 </div>
               );

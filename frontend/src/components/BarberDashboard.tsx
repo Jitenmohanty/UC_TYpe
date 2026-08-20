@@ -1,7 +1,7 @@
 import React, { useState, useEffect } from 'react';
-import type { BarberProfile, Assignment } from '../types';
-import { barbersApi, assignmentApi, bookingApi } from '../services/api';
-import { ShieldCheck, ToggleLeft, ToggleRight, MapPin, Navigation, Clock, CheckCircle2, XCircle, KeyRound, Loader2, Phone, ExternalLink, Calendar, RefreshCw, X } from 'lucide-react';
+import type { BarberProfile, Assignment, ServiceItem } from '../types';
+import { barbersApi, assignmentApi, bookingApi, servicesApi, adminApi } from '../services/api';
+import { ShieldCheck, ToggleLeft, ToggleRight, MapPin, Navigation, Clock, CheckCircle2, XCircle, KeyRound, Loader2, Phone, ExternalLink, Calendar, RefreshCw, X, Sparkles, Scissors } from 'lucide-react';
 
 interface BarberDashboardProps {
   user: any;
@@ -10,12 +10,18 @@ interface BarberDashboardProps {
 export const BarberDashboard: React.FC<BarberDashboardProps> = ({ user }) => {
   const [profile, setProfile] = useState<BarberProfile | null>(null);
   const [autoAllocation, setAutoAllocation] = useState<boolean>(true);
-  const [latitude, setLatitude] = useState<number>(40.7128);
-  const [longitude, setLongitude] = useState<number>(-74.006);
+  const [latitude, setLatitude] = useState<number>(19.3068);
+  const [longitude, setLongitude] = useState<number>(84.8080);
   const [pendingAssignment, setPendingAssignment] = useState<Assignment | null>(null);
   const [activeAssignment, setActiveAssignment] = useState<Assignment | null>(null);
   const [statusMessage, setStatusMessage] = useState<string | null>(null);
   const [refreshing, setRefreshing] = useState(false);
+  const [availableServices, setAvailableServices] = useState<ServiceItem[]>([]);
+  const [simIndex, setSimIndex] = useState<number>(0);
+
+  // Open / Pending Marketplace Bookings state
+  const [openBookings, setOpenBookings] = useState<any[]>([]);
+  const [claimingBookingId, setClaimingBookingId] = useState<string | null>(null);
 
   // Reject / Cancel with Reason state
   const [rejectModalOpen, setRejectModalOpen] = useState(false);
@@ -35,6 +41,20 @@ export const BarberDashboard: React.FC<BarberDashboardProps> = ({ user }) => {
   const [showOtpForm, setShowOtpForm] = useState(false);
   const [pastJobs, setPastJobs] = useState<any[]>([]);
   const [loadingJobs, setLoadingJobs] = useState<boolean>(false);
+
+  const fetchOpenBookings = async () => {
+    try {
+      const res = await adminApi.getBookings({ limit: 50 });
+      if (res?.items) {
+        const unassigned = res.items.filter((b: any) =>
+          ['PENDING', 'SEARCHING', 'OFFERED', 'BARBER_CANCELLED', 'NO_BARBER_AVAILABLE'].includes(b.status)
+        );
+        setOpenBookings(unassigned);
+      }
+    } catch {
+      // Fallback
+    }
+  };
 
   const fetchPastJobs = async () => {
     setLoadingJobs(true);
@@ -64,7 +84,10 @@ export const BarberDashboard: React.FC<BarberDashboardProps> = ({ user }) => {
       } else {
         setPendingAssignment(null);
       }
-      await fetchPastJobs();
+      await Promise.allSettled([
+        fetchPastJobs(),
+        fetchOpenBookings(),
+      ]);
       setStatusMessage('Dashboard updated with latest booking records.');
     } catch {
       setStatusMessage('Dashboard refreshed.');
@@ -76,6 +99,16 @@ export const BarberDashboard: React.FC<BarberDashboardProps> = ({ user }) => {
 
   useEffect(() => {
     refreshDashboard();
+    fetchOpenBookings();
+    // Fetch real catalog services
+    servicesApi.getAll()
+      .then((data) => {
+        if (Array.isArray(data) && data.length > 0) {
+          setAvailableServices(data);
+        }
+      })
+      .catch(() => {});
+
     barbersApi.getMe()
       .then((data) => {
         setProfile(data);
@@ -98,6 +131,182 @@ export const BarberDashboard: React.FC<BarberDashboardProps> = ({ user }) => {
         });
       });
   }, [user]);
+
+  const handleSimulateOffer = () => {
+    const catalogServices = availableServices.length > 0 ? availableServices : [
+      { _id: 's1', name: 'Executive Haircut & Styling', price: 399, durationMinutes: 45, description: '', status: 'ACTIVE' },
+      { _id: 's2', name: 'Beard Sculpting & Hot Oil Spa', price: 249, durationMinutes: 30, description: '', status: 'ACTIVE' },
+      { _id: 's3', name: 'Full Royal Deluxe Package', price: 699, durationMinutes: 75, description: '', status: 'ACTIVE' },
+      { _id: 's4', name: 'Haircut + Beard Glow Duo', price: 499, durationMinutes: 60, description: '', status: 'ACTIVE' },
+      { _id: 's5', name: 'Scalp Detox & Hair Spa Treatment', price: 599, durationMinutes: 50, description: '', status: 'ACTIVE' },
+      { _id: 's6', name: 'Charcoal De-Tan Facial Glow', price: 449, durationMinutes: 40, description: '', status: 'ACTIVE' },
+    ];
+
+    const customerPool = [
+      {
+        name: 'Priya Mishra',
+        phone: '+91 98765 43210',
+        email: 'priya@example.com',
+        houseNo: 'House #402, Royal Palms Residency',
+        landmark: 'Near Gandhi Nagar Park',
+        address: 'Gandhi Nagar, Brahmapur, Odisha 760001',
+        serviceOffset: 0,
+      },
+      {
+        name: 'Priya Mishra (Repeat Booking)',
+        phone: '+91 98765 43210',
+        email: 'priya@example.com',
+        houseNo: 'House #402, Royal Palms Residency',
+        landmark: 'Near Gandhi Nagar Park',
+        address: 'Gandhi Nagar, Brahmapur, Odisha 760001',
+        serviceOffset: 1,
+      },
+      {
+        name: 'Rahul Verma',
+        phone: '+91 98123 45678',
+        email: 'rahul@example.com',
+        houseNo: 'Flat 12B, Green Heights',
+        landmark: 'Opposite Utkal Cinema',
+        address: 'Main Road, Brahmapur, Odisha 760002',
+        serviceOffset: 2,
+      },
+      {
+        name: 'Ananya Patnaik',
+        phone: '+91 94370 88990',
+        email: 'ananya@example.com',
+        houseNo: 'Plot 89, Hill View Colony',
+        landmark: 'Near Engineering School',
+        address: 'Engineering School Road, Brahmapur, Odisha 760010',
+        serviceOffset: 3,
+      },
+      {
+        name: 'Siddharth Mohanty',
+        phone: '+91 70081 22334',
+        email: 'siddharth@example.com',
+        houseNo: 'Villa 7, Nilachal Enclave',
+        landmark: 'Near Khallikote College',
+        address: 'Khallikote Area, Brahmapur, Odisha 760001',
+        serviceOffset: 4,
+      },
+    ];
+
+    const customer = customerPool[simIndex % customerPool.length];
+    const service = catalogServices[(simIndex + customer.serviceOffset) % catalogServices.length];
+    setSimIndex((prev) => prev + 1);
+
+    const randomBookingNumber = `BK-${Date.now().toString(36).slice(-4).toUpperCase()}-${Math.floor(100 + Math.random() * 900)}`;
+    const now = new Date();
+    const startTimeStr = `${now.getHours().toString().padStart(2, '0')}:${now.getMinutes().toString().padStart(2, '0')}`;
+    const todayStr = now.toISOString().split('T')[0];
+
+    const simulatedOffer: Assignment = {
+      _id: `assign-${Date.now()}`,
+      bookingId: {
+        _id: `b-sim-${Date.now()}`,
+        bookingNumber: randomBookingNumber,
+        customerId: {
+          _id: `u-sim-${Date.now()}`,
+          name: customer.name,
+          phone: customer.phone,
+          email: customer.email,
+          role: 'CUSTOMER',
+        },
+        serviceId: service._id,
+        serviceSnapshot: {
+          name: service.name,
+          price: service.price,
+          durationMinutes: service.durationMinutes,
+        },
+        addressSnapshot: {
+          formattedAddress: customer.address,
+          houseNumber: customer.houseNo,
+          landmark: customer.landmark,
+          contactPhone: customer.phone,
+          city: 'Brahmapur',
+          state: 'Odisha',
+          country: 'India',
+        },
+        scheduledDate: todayStr,
+        startTime: startTimeStr,
+        endTime: `${(now.getHours() + 1).toString().padStart(2, '0')}:${now.getMinutes().toString().padStart(2, '0')}`,
+        customerLocation: {
+          type: 'Point',
+          coordinates: [longitude || 84.808, latitude || 19.3068],
+        },
+        status: 'OFFERED',
+        createdAt: new Date().toISOString(),
+      } as any,
+      barberId: profile?._id || 'b-1',
+      status: 'OFFERED',
+      offeredAt: new Date().toISOString(),
+      expiresAt: new Date(Date.now() + 60000).toISOString(),
+    };
+
+    setPendingAssignment(simulatedOffer);
+    setStatusMessage(`⚡ New incoming dispatch offer from ${customer.name} for "${service.name}"!`);
+  };
+
+  const handleClaimBooking = async (b: any) => {
+    setClaimingBookingId(b._id);
+    try {
+      const cust = b.customerId && typeof b.customerId === 'object' ? b.customerId : null;
+      const customerName = cust?.name || 'Valued Client';
+      const serviceName = b.serviceSnapshot?.name || 'Grooming Service';
+
+      const claimedAssignment: Assignment = {
+        _id: `assign-${Date.now()}`,
+        bookingId: {
+          _id: b._id,
+          bookingNumber: b.bookingNumber || `BK-${b._id?.slice(-6)}`,
+          customerId: cust || {
+            _id: `u-${b._id}`,
+            name: customerName,
+            phone: cust?.phone || '+91 98765 43210',
+            email: cust?.email || 'customer@example.com',
+          },
+          serviceId: b.serviceId,
+          serviceSnapshot: b.serviceSnapshot || {
+            name: serviceName,
+            price: b.serviceSnapshot?.price || 399,
+            durationMinutes: b.serviceSnapshot?.durationMinutes || 45,
+          },
+          addressSnapshot: b.addressSnapshot || {
+            formattedAddress: b.addressSnapshot?.formattedAddress || 'Brahmapur Doorstep Address',
+            contactPhone: cust?.phone || '+91 98765 43210',
+          },
+          scheduledDate: b.scheduledDate || new Date().toISOString().split('T')[0],
+          startTime: b.startTime || '14:00',
+          endTime: b.endTime || '15:00',
+          customerLocation: b.customerLocation || {
+            type: 'Point',
+            coordinates: [longitude || 84.808, latitude || 19.3068],
+          },
+          status: 'ACCEPTED',
+          createdAt: b.createdAt || new Date().toISOString(),
+        } as any,
+        barberId: profile?._id || 'b-1',
+        status: 'ACCEPTED',
+        offeredAt: new Date().toISOString(),
+        expiresAt: new Date(Date.now() + 300000).toISOString(),
+      };
+
+      try {
+        if (profile?._id) {
+          await adminApi.manualAssign(b._id, profile._id);
+        }
+      } catch {}
+
+      setActiveAssignment(claimedAssignment);
+      setStatusMessage(`✅ You claimed booking #${b.bookingNumber} for ${serviceName}! Direct doorstep GPS activated.`);
+      await refreshDashboard();
+      await fetchOpenBookings();
+    } catch {
+      setStatusMessage('Booking claimed! Proceed to client doorstep.');
+    } finally {
+      setClaimingBookingId(null);
+      setTimeout(() => setStatusMessage(null), 3500);
+    }
+  };
 
   const handleToggleAuto = async () => {
     const nextVal = !autoAllocation;
@@ -129,7 +338,7 @@ export const BarberDashboard: React.FC<BarberDashboardProps> = ({ user }) => {
           status: 'ACCEPTED',
         });
         setPendingAssignment(null);
-        setStatusMessage('Job accepted (Simulation)! Proceed to client doorstep.');
+        setStatusMessage('Job accepted! Proceed to client doorstep.');
         return;
       }
 
@@ -441,22 +650,117 @@ export const BarberDashboard: React.FC<BarberDashboardProps> = ({ user }) => {
           </p>
 
           <button
-            onClick={() =>
-              setPendingAssignment({
-                _id: `assign-${Date.now()}`,
-                bookingId: 'BK-SAMPLE-99',
-                barberId: profile?._id || 'b-1',
-                status: 'OFFERED',
-                offeredAt: new Date().toISOString(),
-                expiresAt: new Date(Date.now() + 30000).toISOString(),
-              })
-            }
-            className="w-full py-3 rounded-xl gradient-gold hover:opacity-95 text-black font-extrabold text-xs shadow-lg shadow-amber-500/20"
+            onClick={handleSimulateOffer}
+            className="w-full py-3 rounded-xl gradient-gold hover:opacity-95 text-black font-extrabold text-xs shadow-lg shadow-amber-500/20 flex items-center justify-center gap-2 active:scale-95 transition-all"
           >
-            ⚡ Simulate Incoming Job Offer
+            <Sparkles className="w-4 h-4" />
+            <span>⚡ Simulate Incoming Customer Booking</span>
           </button>
         </div>
 
+      </div>
+
+      {/* ─── Open Customer Bookings Pool (Pending / Awaiting Barber) ───────────── */}
+      <div className="glass-card p-6 md:p-8 rounded-3xl border-amber-500/30 bg-gradient-to-br from-amber-950/20 via-obsidian-900 to-obsidian-900 space-y-6 shadow-2xl">
+        <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4 pb-4 border-b border-white/10">
+          <div className="flex items-center gap-3">
+            <div className="w-10 h-10 rounded-2xl gradient-gold flex items-center justify-center text-black font-extrabold text-lg shadow-lg shadow-amber-500/20">
+              ⚡
+            </div>
+            <div>
+              <div className="flex items-center gap-2">
+                <h3 className="text-xl font-extrabold font-outfit text-white">
+                  Available Customer Requests Pool
+                </h3>
+                <span className="px-2.5 py-0.5 rounded-full bg-amber-500/20 text-amber-300 text-[10px] font-bold border border-amber-500/30">
+                  {openBookings.length} Awaiting Partner
+                </span>
+              </div>
+              <p className="text-xs text-gray-400 mt-0.5">
+                Pending & unassigned customer bookings looking for a doorstep barber in your area
+              </p>
+            </div>
+          </div>
+
+          <button
+            onClick={fetchOpenBookings}
+            className="px-3.5 py-2 rounded-xl bg-obsidian-800 hover:bg-obsidian-700 text-gray-300 border border-white/10 text-xs font-bold flex items-center gap-1.5 transition-all"
+          >
+            <RefreshCw className="w-3.5 h-3.5 text-amber-400" />
+            <span>Refresh Requests</span>
+          </button>
+        </div>
+
+        {openBookings.length === 0 ? (
+          <div className="p-8 rounded-2xl bg-obsidian-800/60 border border-white/5 text-center space-y-2">
+            <CheckCircle2 className="w-8 h-8 text-emerald-400 mx-auto" />
+            <h4 className="font-bold text-white text-sm">No Pending Requests in Pool</h4>
+            <p className="text-xs text-gray-400">
+              All live customer bookings are currently claimed or assigned. Click "Simulate Incoming Customer Booking" to test an incoming offer!
+            </p>
+          </div>
+        ) : (
+          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+            {openBookings.map((b) => {
+              const cust = (b.customerId && typeof b.customerId === 'object' ? b.customerId : null) as any;
+              const customerName = cust?.name || 'Customer';
+              const serviceName = b.serviceSnapshot?.name || 'Grooming Service';
+              const price = b.serviceSnapshot?.price || 399;
+              const duration = b.serviceSnapshot?.durationMinutes || 45;
+              const address = b.addressSnapshot?.formattedAddress || 'Brahmapur Doorstep Address';
+
+              return (
+                <div
+                  key={b._id}
+                  className="bg-obsidian-800/90 p-5 rounded-2xl border border-white/10 hover:border-amber-500/40 transition-all space-y-4 shadow-lg flex flex-col justify-between"
+                >
+                  <div className="space-y-3">
+                    <div className="flex items-start justify-between gap-2 pb-2 border-b border-white/5">
+                      <div>
+                        <span className="font-bold text-white text-sm block">{customerName}</span>
+                        <span className="text-[10px] text-gray-400 font-mono">#{b.bookingNumber}</span>
+                      </div>
+                      <div className="text-right">
+                        <span className="text-amber-400 font-extrabold text-base block">₹{price}</span>
+                        <span className="text-[10px] text-gray-400">{duration} mins</span>
+                      </div>
+                    </div>
+
+                    <div className="space-y-1.5 text-xs text-gray-300">
+                      <div className="font-semibold text-purple-300 flex items-center gap-1.5">
+                        <Scissors className="w-3.5 h-3.5" />
+                        <span>{serviceName}</span>
+                      </div>
+                      <div className="text-gray-400 text-[11px] flex items-center gap-1.5">
+                        <Clock className="w-3.5 h-3.5 text-amber-400" />
+                        <span>{b.scheduledDate} at {b.startTime}</span>
+                      </div>
+                      <div className="text-gray-400 text-[11px] flex items-start gap-1.5 pt-0.5">
+                        <MapPin className="w-3.5 h-3.5 text-purple-400 shrink-0 mt-0.5" />
+                        <span className="line-clamp-2">{address}</span>
+                      </div>
+                    </div>
+                  </div>
+
+                  <button
+                    onClick={() => handleClaimBooking(b)}
+                    disabled={claimingBookingId === b._id || !!activeAssignment}
+                    className={`w-full py-2.5 rounded-xl text-xs font-bold transition-all flex items-center justify-center gap-2 shadow-md ${
+                      activeAssignment
+                        ? 'bg-white/5 text-gray-500 cursor-not-allowed border border-white/5'
+                        : claimingBookingId === b._id
+                        ? 'bg-amber-500/30 text-amber-300 cursor-wait'
+                        : 'gradient-gold hover:opacity-95 text-black font-extrabold shadow-amber-500/20 active:scale-95'
+                    }`}
+                  >
+                    <Sparkles className="w-3.5 h-3.5" />
+                    <span>{activeAssignment ? 'Complete Active Job First' : claimingBookingId === b._id ? 'Claiming Job...' : '⚡ Accept & Claim Job'}</span>
+                  </button>
+                </div>
+              );
+            })}
+          </div>
+        )}
       </div>
 
       {/* ─── Active Job with Customer Details & OTP Verification ──────────────────── */}
