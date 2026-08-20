@@ -21,6 +21,8 @@ import {
   Navigation,
 } from 'lucide-react';
 
+import { fetchLiveCoordinates, getCachedCoordinates } from '../services/location';
+
 interface AuthModalProps {
   isOpen: boolean;
   onClose: () => void;
@@ -47,8 +49,9 @@ export const AuthModal: React.FC<AuthModalProps> = ({
   const [showPassword, setShowPassword] = useState(false);
 
   // Location state (Mandatory for Doorstep Services)
-  const [latitude, setLatitude] = useState<number>(20.2961);
-  const [longitude, setLongitude] = useState<number>(85.8245);
+  const initialCoords = getCachedCoordinates();
+  const [latitude, setLatitude] = useState<number>(initialCoords.latitude);
+  const [longitude, setLongitude] = useState<number>(initialCoords.longitude);
   const [locationLoading, setLocationLoading] = useState(false);
   const [locationDetected, setLocationDetected] = useState(false);
 
@@ -66,38 +69,24 @@ export const AuthModal: React.FC<AuthModalProps> = ({
   const [error, setError] = useState<string | null>(initialMessage);
   const [successMsg, setSuccessMsg] = useState<string | null>(null);
 
-  const requestLocation = () => {
+  const requestLocation = async () => {
     setLocationLoading(true);
-    if (navigator.geolocation) {
-      navigator.geolocation.getCurrentPosition(
-        (pos) => {
-          setLatitude(Number(pos.coords.latitude.toFixed(6)));
-          setLongitude(Number(pos.coords.longitude.toFixed(6)));
-          setLocationDetected(true);
-          setLocationLoading(false);
-        },
-        () => {
-          setLatitude(20.2961);
-          setLongitude(85.8245);
-          setLocationDetected(true);
-          setLocationLoading(false);
-        },
-        { enableHighAccuracy: true, timeout: 8000 }
-      );
-    } else {
-      setLatitude(20.2961);
-      setLongitude(85.8245);
+    try {
+      const coords = await fetchLiveCoordinates(false);
+      setLatitude(coords.latitude);
+      setLongitude(coords.longitude);
       setLocationDetected(true);
+    } finally {
       setLocationLoading(false);
     }
   };
 
-  // Auto-request location when switching to register
+  // Auto-request real location whenever switching to register
   useEffect(() => {
-    if (mode === 'register' && !locationDetected) {
-      requestLocation();
+    if (mode === 'register') {
+      void requestLocation();
     }
-  }, [mode, locationDetected]);
+  }, [mode]);
 
   // Countdown timer for OTP
   useEffect(() => {
@@ -463,7 +452,7 @@ export const AuthModal: React.FC<AuthModalProps> = ({
 
                 <div className="flex items-center gap-1.5 text-[10px] text-emerald-400 pt-0.5">
                   <span className="w-1.5 h-1.5 rounded-full bg-emerald-400 animate-pulse"></span>
-                  <span>Required for doorstep barber allocation and arrival.</span>
+                  <span>{locationDetected ? 'Live GPS coordinates detected & synced.' : 'Required for doorstep barber allocation and arrival.'}</span>
                 </div>
               </div>
             )}

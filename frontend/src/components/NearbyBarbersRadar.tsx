@@ -1,6 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import type { BarberProfile } from '../types';
 import { barbersApi } from '../services/api';
+import { fetchLiveCoordinates, getCachedCoordinates } from '../services/location';
 import { MapPin, Navigation, Star, ShieldCheck } from 'lucide-react';
 
 interface NearbyBarbersRadarProps {
@@ -10,72 +11,36 @@ interface NearbyBarbersRadarProps {
 export const NearbyBarbersRadar: React.FC<NearbyBarbersRadarProps> = ({ onSelectBarber }) => {
   const [barbers, setBarbers] = useState<BarberProfile[]>([]);
   const [radiusKm, setRadiusKm] = useState(10);
-  const [coords, setCoords] = useState<{ latitude: number; longitude: number }>({
-    latitude: 40.7128,
-    longitude: -74.006,
-  });
+  const [coords, setCoords] = useState<{ latitude: number; longitude: number }>(getCachedCoordinates());
+  const [locationLoading, setLocationLoading] = useState(false);
 
   const fetchNearby = async (lat: number, lng: number, r: number) => {
     try {
       const data = await barbersApi.getNearby({ latitude: lat, longitude: lng, radiusKm: r });
       setBarbers(data);
     } catch {
-      setBarbers([
-        {
-          _id: 'mock-1',
-          userId: 'u-1',
-          bio: 'Master Barber specializing in skin fades, beard sculpting & razor line-ups.',
-          experienceYears: 7,
-          rating: 4.9,
-          totalReviews: 142,
-          totalCompletedJobs: 380,
-          autoAllocationEnabled: true,
-          serviceRadiusKm: 15,
-          distanceKm: 1.4,
-          user: { _id: 'u-1', name: 'Marcus Vance', email: 'marcus@aura.com', phone: '+1234567890', role: 'BARBER' },
-        },
-        {
-          _id: 'mock-2',
-          userId: 'u-2',
-          bio: 'Precision hairstylist with 10+ years experience in executive cuts.',
-          experienceYears: 10,
-          rating: 5.0,
-          totalReviews: 210,
-          totalCompletedJobs: 540,
-          autoAllocationEnabled: true,
-          serviceRadiusKm: 10,
-          distanceKm: 2.8,
-          user: { _id: 'u-2', name: 'Elena Rostova', email: 'elena@aura.com', phone: '+1987654321', role: 'BARBER' },
-        },
-        {
-          _id: 'mock-3',
-          userId: 'u-3',
-          bio: 'Specialist in modern textured crops and hot towel shave rituals.',
-          experienceYears: 5,
-          rating: 4.8,
-          totalReviews: 89,
-          totalCompletedJobs: 195,
-          autoAllocationEnabled: true,
-          serviceRadiusKm: 12,
-          distanceKm: 4.1,
-          user: { _id: 'u-3', name: 'David Chen', email: 'david@aura.com', phone: '+1555444333', role: 'BARBER' },
-        },
-      ]);
+      setBarbers([]);
     }
   };
+
+  useEffect(() => {
+    fetchLiveCoordinates(true).then((live) => {
+      setCoords(live);
+      fetchNearby(live.latitude, live.longitude, radiusKm);
+    });
+  }, []);
 
   useEffect(() => {
     fetchNearby(coords.latitude, coords.longitude, radiusKm);
   }, [coords, radiusKm]);
 
-  const handleUseMyLocation = () => {
-    if (navigator.geolocation) {
-      navigator.geolocation.getCurrentPosition((pos) => {
-        setCoords({
-          latitude: pos.coords.latitude,
-          longitude: pos.coords.longitude,
-        });
-      });
+  const handleUseMyLocation = async () => {
+    setLocationLoading(true);
+    try {
+      const live = await fetchLiveCoordinates(true);
+      setCoords(live);
+    } finally {
+      setLocationLoading(false);
     }
   };
 
@@ -97,10 +62,11 @@ export const NearbyBarbersRadar: React.FC<NearbyBarbersRadarProps> = ({ onSelect
           <div className="flex items-center gap-3">
             <button
               onClick={handleUseMyLocation}
+              disabled={locationLoading}
               className="flex items-center gap-2 px-4 py-2.5 rounded-xl bg-obsidian-800 hover:bg-obsidian-700 text-xs font-semibold text-purple-300 border border-purple-500/30 transition-all"
             >
-              <Navigation className="w-4 h-4 text-purple-400" />
-              Use My Current Location
+              <Navigation className={`w-4 h-4 text-purple-400 ${locationLoading ? 'animate-spin' : ''}`} />
+              {locationLoading ? 'Detecting GPS...' : 'Use My Current Location'}
             </button>
 
             <select

@@ -1,7 +1,8 @@
 import React, { useState, useEffect } from 'react';
 import type { ServiceItem, BarberProfile, Booking } from '../types';
 import { bookingApi, barbersApi } from '../services/api';
-import { X, AlertCircle, Sparkles, UserCheck, Scissors, Calendar, Clock, MapPin } from 'lucide-react';
+import { fetchLiveCoordinates, getCachedCoordinates } from '../services/location';
+import { X, AlertCircle, Sparkles, UserCheck, Scissors, Calendar, Clock, MapPin, Navigation, CheckCircle2 } from 'lucide-react';
 
 interface BookingWizardModalProps {
   isOpen: boolean;
@@ -28,9 +29,12 @@ export const BookingWizardModal: React.FC<BookingWizardModalProps> = ({
 
   const [step, setStep] = useState<1 | 2 | 3>(1);
 
-  // Default coordinates (Bhubaneswar center: 20.2961, 85.8245)
-  const [latitude, setLatitude] = useState<number>(20.2961);
-  const [longitude, setLongitude] = useState<number>(85.8245);
+  // Live real-time coordinates
+  const initialCoords = getCachedCoordinates();
+  const [latitude, setLatitude] = useState<number>(initialCoords.latitude);
+  const [longitude, setLongitude] = useState<number>(initialCoords.longitude);
+  const [locationLoading, setLocationLoading] = useState<boolean>(false);
+  const [locationDetected, setLocationDetected] = useState<boolean>(false);
 
   const [availableBarbers, setAvailableBarbers] = useState<BarberProfile[]>([]);
   const [serviceId, setServiceId] = useState<string>('');
@@ -45,6 +49,29 @@ export const BookingWizardModal: React.FC<BookingWizardModalProps> = ({
   const [loading, setLoading] = useState<boolean>(false);
   const [searching, setSearching] = useState<boolean>(false);
   const [error, setError] = useState<string | null>(null);
+
+  const requestLiveLocation = async () => {
+    setLocationLoading(true);
+    try {
+      const coords = await fetchLiveCoordinates(true);
+      setLatitude(coords.latitude);
+      setLongitude(coords.longitude);
+      setLocationDetected(true);
+    } finally {
+      setLocationLoading(false);
+    }
+  };
+
+  // Automatically fetch live GPS coordinates when opening the modal or stepping to location
+  useEffect(() => {
+    void requestLiveLocation();
+  }, [isOpen]);
+
+  useEffect(() => {
+    if (step === 3 && !locationDetected) {
+      void requestLiveLocation();
+    }
+  }, [step]);
 
   // Initialize service & barber state on open/props change
   useEffect(() => {
@@ -63,7 +90,7 @@ export const BookingWizardModal: React.FC<BookingWizardModalProps> = ({
       setBarberPreference('ANY');
     }
 
-    // Fetch nearby barbers list for dropdown
+    // Fetch nearby barbers list based on live location
     barbersApi.getNearby({ latitude, longitude, radiusKm: 10 })
       .then((list) => {
         const validList = list.filter((b) => isValidMongoId(b._id));
@@ -79,6 +106,19 @@ export const BookingWizardModal: React.FC<BookingWizardModalProps> = ({
     setLoading(true);
     setSearching(true);
     setError(null);
+
+    // Request freshest live GPS coordinate right before booking submission
+    let finalLat = latitude;
+    let finalLng = longitude;
+    try {
+      const freshCoords = await fetchLiveCoordinates(true);
+      finalLat = freshCoords.latitude;
+      finalLng = freshCoords.longitude;
+      setLatitude(finalLat);
+      setLongitude(finalLng);
+    } catch {
+      // Fallback to currently selected coordinates
+    }
 
     // Validate serviceId
     const finalServiceId = isValidMongoId(serviceId)
@@ -99,8 +139,8 @@ export const BookingWizardModal: React.FC<BookingWizardModalProps> = ({
       barberPreference: finalPreference,
       ...(finalPreference === 'SPECIFIC' && validBarberId ? { preferredBarberId: validBarberId } : {}),
       customerLocation: {
-        latitude: Number(latitude),
-        longitude: Number(longitude),
+        latitude: Number(finalLat),
+        longitude: Number(finalLng),
       },
     };
 
@@ -301,25 +341,40 @@ export const BookingWizardModal: React.FC<BookingWizardModalProps> = ({
             {/* Step 3: Location */}
             {step === 3 && (
               <div className="space-y-4">
-                <label className="block text-xs font-bold text-gray-300 uppercase tracking-wider">
-                  Service Delivery Location Coordinates
-                </label>
+                <div className="flex items-center justify-between">
+                  <label className="block text-xs font-bold text-gray-300 uppercase tracking-wider flex items-center gap-1.5">
+                    <MapPin className="w-4 h-4 text-purple-400" />
+                    Service Delivery Location Coordinates
+                  </label>
+                  <button
+                    type="button"
+                    onClick={requestLiveLocation}
+                    disabled={locationLoading}
+                    className="text-[11px] text-purple-300 hover:text-white bg-purple-600/30 hover:bg-purple-600/50 px-3 py-1.5 rounded-xl border border-purple-500/40 flex items-center gap-1.5 transition-all shadow-sm"
+                  >
+                    <Navigation className={`w-3.5 h-3.5 text-purple-400 ${locationLoading ? 'animate-spin' : ''}`} />
+                    {locationLoading ? 'Detecting GPS...' : 'Detect Live GPS'}
+                  </button>
+                </div>
+
                 <div className="grid grid-cols-2 gap-3">
                   <div>
-                    <span className="text-[10px] text-gray-400 block mb-1">Latitude</span>
+                    <span className="text-[10px] text-gray-400 block mb-1">Latitude (Doorstep GPS)</span>
                     <input
                       type="number"
                       step="any"
+                      required
                       value={latitude}
                       onChange={(e) => setLatitude(Number(e.target.value))}
                       className="w-full glass-input px-3 py-2.5 rounded-2xl text-xs text-white"
                     />
                   </div>
                   <div>
-                    <span className="text-[10px] text-gray-400 block mb-1">Longitude</span>
+                    <span className="text-[10px] text-gray-400 block mb-1">Longitude (Doorstep GPS)</span>
                     <input
                       type="number"
                       step="any"
+                      required
                       value={longitude}
                       onChange={(e) => setLongitude(Number(e.target.value))}
                       className="w-full glass-input px-3 py-2.5 rounded-2xl text-xs text-white"
@@ -327,8 +382,14 @@ export const BookingWizardModal: React.FC<BookingWizardModalProps> = ({
                   </div>
                 </div>
 
-                <div className="p-3 rounded-2xl bg-purple-500/10 border border-purple-500/20 text-purple-300 text-xs">
-                  📍 Customer Location set to Bhubaneswar center coordinates (`20.2961, 85.8245`).
+                <div className="p-3.5 rounded-2xl bg-purple-500/10 border border-purple-500/20 text-purple-200 text-xs flex items-center justify-between">
+                  <div className="flex items-center gap-2">
+                    <CheckCircle2 className="w-4 h-4 text-emerald-400 shrink-0" />
+                    <span>Real-time GPS coordinates will be dispatched to your assigned barber.</span>
+                  </div>
+                  <span className="text-[10px] text-emerald-400 font-mono font-bold bg-emerald-500/10 px-2 py-0.5 rounded-lg border border-emerald-500/30">
+                    Live GPS Sync
+                  </span>
                 </div>
               </div>
             )}

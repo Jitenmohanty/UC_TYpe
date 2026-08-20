@@ -84,7 +84,21 @@ export const servicesApi = {
   },
 };
 
-// Barber API
+// Customer API
+export const customersApi = {
+  getProfile: async () => {
+    const res = await api.get('/customers/me');
+    return res.data.data;
+  },
+  updateProfile: async (payload: { name?: string; phone?: string }) => {
+    const res = await api.patch('/customers/me', payload);
+    return res.data.data;
+  },
+  updateLocation: async (latitude: number, longitude: number) => {
+    const res = await api.patch('/customers/me/location', { latitude, longitude });
+    return res.data.data;
+  },
+};
 export const barbersApi = {
   getNearby: async (params: { latitude: number; longitude: number; radiusKm?: number }): Promise<BarberProfile[]> => {
     const res = await api.get('/barbers/nearby', { params });
