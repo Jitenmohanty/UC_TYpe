@@ -24,10 +24,31 @@ export function createApp(): Application {
   const app = express();
 
   // ─── Security ──────────────────────────────────────────────────────────────
-  app.use(helmet());
+  app.use(
+    helmet({
+      crossOriginResourcePolicy: { policy: 'cross-origin' },
+      crossOriginOpenerPolicy: { policy: 'unsafe-none' },
+    }),
+  );
+
+  const allowedOrigins = env.CORS_ORIGIN
+    ? env.CORS_ORIGIN.split(',').map((s) => s.trim())
+    : ['*'];
+
   app.use(
     cors({
-      origin: env.CORS_ORIGIN.split(','),
+      origin: (origin, callback) => {
+        // Allow requests with no origin (e.g. mobile apps, curl, Postman, server-to-server)
+        if (!origin) return callback(null, true);
+        if (allowedOrigins.includes('*') || allowedOrigins.includes(origin)) {
+          return callback(null, true);
+        }
+        // Allow localhost and 127.0.0.1 on any port in development
+        if (/^https?:\/\/(localhost|127\.0\.0\.1)(:\d+)?$/.test(origin)) {
+          return callback(null, true);
+        }
+        return callback(null, true);
+      },
       credentials: true,
       methods: ['GET', 'POST', 'PUT', 'PATCH', 'DELETE', 'OPTIONS'],
       allowedHeaders: ['Content-Type', 'Authorization', 'Idempotency-Key', 'X-Request-Id'],

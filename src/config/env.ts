@@ -34,7 +34,7 @@ const envSchema = z.object({
   RATE_LIMIT_BOOKING_PER_HOUR: z.coerce.number().default(20),
   RATE_LIMIT_LOCATION_UPDATE_PER_MINUTE: z.coerce.number().default(10),
 
-  CORS_ORIGIN: z.string().default('http://localhost:3001'),
+  CORS_ORIGIN: z.string().default('*'),
 
   LOG_LEVEL: z.enum(['fatal', 'error', 'warn', 'info', 'debug', 'trace']).default('info'),
 
