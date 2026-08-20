@@ -62,9 +62,12 @@ reviewRoutes.post(
     // Update barber average rating
     const reviews = await ReviewModel.find({ barberId: assignment.barberId }).exec();
     const avgRating = reviews.reduce((sum, r) => sum + r.rating, 0) / reviews.length;
-    await BarberProfileModel.findByIdAndUpdate(assignment.barberId, {
-      $set: { rating: parseFloat(avgRating.toFixed(2)), totalReviews: reviews.length },
-    }).exec();
+    await BarberProfileModel.findOneAndUpdate(
+      { $or: [{ _id: assignment.barberId }, { userId: assignment.barberId }] },
+      {
+        $set: { rating: parseFloat(avgRating.toFixed(2)), totalReviews: reviews.length },
+      },
+    ).exec();
 
     sendCreated(res, review, 'Review submitted');
   }),

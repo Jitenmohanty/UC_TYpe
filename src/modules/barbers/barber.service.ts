@@ -108,15 +108,36 @@ export class BarberService {
 
   async getMyBookings(userId: Types.ObjectId, pagination: PaginationQuery) {
     const profile = await barberProfileRepository.findByUserId(userId);
-    if (!profile) throw new NotFoundError('Barber profile');
+    const barberIds: (Types.ObjectId | string)[] = [userId];
+    if (profile) barberIds.push(profile._id);
 
-    const { assignmentRepository } = await import('../assignments/assignment.repository');
+    const { AssignmentModel } = await import('../assignments/assignment.model');
     const { AssignmentStatus } = await import('../../common/constants/assignmentStates');
-    return assignmentRepository.findByBarberAndStatus(
-      profile._id,
-      [AssignmentStatus.ACCEPTED, AssignmentStatus.COMPLETED],
-      pagination.limit ?? 20,
-    );
+
+    const limit = pagination.limit ?? 50;
+    const assignments = await AssignmentModel.find({
+      barberId: { $in: barberIds },
+      status: {
+        $in: [
+          AssignmentStatus.ACCEPTED,
+          AssignmentStatus.COMPLETED,
+          AssignmentStatus.CANCELLED_BY_BARBER,
+          AssignmentStatus.OFFERED,
+        ],
+      },
+    })
+      .sort({ createdAt: -1 })
+      .limit(limit)
+      .populate({
+        path: 'bookingId',
+        populate: [
+          { path: 'customerId', select: 'name email phone' },
+          { path: 'serviceId', select: 'name price durationMinutes' },
+        ],
+      })
+      .exec();
+
+    return assignments;
   }
 }
 

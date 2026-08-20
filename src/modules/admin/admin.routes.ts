@@ -124,16 +124,41 @@ adminRoutes.post(
     const booking = await bookingRepository.findByIdLean(new Types.ObjectId(req.params['bookingId']!));
     if (!booking) throw new NotFoundError('Booking');
 
+    const reason = (req.body as { reason?: string }).reason ?? 'Admin cancelled';
+
     await bookingStateMachine.transition(
       booking._id,
       booking.status,
       BookingStatus.ADMIN_CANCELLED,
       {
-        cancellationReason: (req.body as { reason?: string }).reason ?? 'Admin cancelled',
+        cancellationReason: reason,
         cancelledBy: req.user!.userId,
         cancelledAt: new Date(),
       },
     );
+
+    // Cancel any active or offered assignment for this booking
+    const activeAssignment = await assignmentRepository.findActiveByBookingId(booking._id);
+    if (activeAssignment) {
+      const { AssignmentStatus } = await import('../../common/constants/assignmentStates');
+      await assignmentRepository.updateStatus(activeAssignment._id, AssignmentStatus.CANCELLED_BY_CUSTOMER, {
+        cancellationReason: reason,
+        cancelledAt: new Date(),
+      });
+      const { emitToUser } = await import('../../sockets/socket.server');
+      const { SocketEvents } = await import('../../sockets/socket.events');
+      emitToUser(activeAssignment.barberId.toString(), SocketEvents.BOOKING_CANCELLED, {
+        bookingId: booking._id.toString(),
+        reason,
+      });
+    }
+
+    const { emitToUser } = await import('../../sockets/socket.server');
+    const { SocketEvents } = await import('../../sockets/socket.events');
+    emitToUser(booking.customerId.toString(), SocketEvents.BOOKING_CANCELLED, {
+      bookingId: booking._id.toString(),
+      reason,
+    });
 
     await auditService.log({
       actorId: req.user!.userId,
@@ -141,6 +166,7 @@ adminRoutes.post(
       action: 'ADMIN_CANCELLED_BOOKING',
       entityType: 'Booking',
       entityId: req.params['bookingId']!,
+      metadata: { reason },
     });
 
     sendSuccess(res, null, 'Booking cancelled by admin');
