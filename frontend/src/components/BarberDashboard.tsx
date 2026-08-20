@@ -726,8 +726,22 @@ export const BarberDashboard: React.FC<BarberDashboardProps> = ({ user }) => {
         const formattedAddr = booking?.addressSnapshot?.formattedAddress || `Coordinates: ${coords[1]?.toFixed(4)}, ${coords[0]?.toFixed(4)}`;
 
         return (
-          <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/85 backdrop-blur-md">
-            <div className="glass-card rounded-3xl p-6 md:p-8 w-full max-w-md border-amber-500/40 space-y-6 text-center shadow-2xl shadow-amber-500/20">
+          <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/85 backdrop-blur-md animate-fade-in">
+            <div className="glass-card rounded-3xl p-6 md:p-8 w-full max-w-md border-amber-500/40 space-y-6 text-center shadow-2xl shadow-amber-500/20 relative">
+              {/* Close Button */}
+              <button
+                type="button"
+                onClick={() => {
+                  setPendingAssignment(null);
+                  setStatusMessage('Offer popup dismissed.');
+                  setTimeout(() => setStatusMessage(null), 3000);
+                }}
+                className="absolute top-4 right-4 p-2 rounded-xl bg-white/5 hover:bg-white/10 text-gray-400 hover:text-white transition-all border border-white/10"
+                title="Close"
+              >
+                <X className="w-5 h-5" />
+              </button>
+
               <div className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full bg-amber-500/20 text-amber-300 text-xs font-bold border border-amber-500/30">
                 <Clock className="w-3.5 h-3.5" />
                 <span>New Booking Offer</span>
