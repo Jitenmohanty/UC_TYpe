@@ -14,18 +14,26 @@ export enum BookingStatus {
 
 // Valid transitions: [fromStatus]: Set of allowed next statuses
 export const BOOKING_TRANSITIONS: Record<BookingStatus, Set<BookingStatus>> = {
-  [BookingStatus.PENDING]: new Set([BookingStatus.SEARCHING, BookingStatus.CUSTOMER_CANCELLED]),
+  [BookingStatus.PENDING]: new Set([
+    BookingStatus.OFFERED,
+    BookingStatus.SEARCHING,
+    BookingStatus.CUSTOMER_CANCELLED,
+    BookingStatus.ADMIN_CANCELLED,
+  ]),
   [BookingStatus.SEARCHING]: new Set([
     BookingStatus.OFFERED,
+    BookingStatus.PENDING,
     BookingStatus.NO_BARBER_AVAILABLE,
     BookingStatus.CUSTOMER_CANCELLED,
     BookingStatus.ADMIN_CANCELLED,
   ]),
   [BookingStatus.OFFERED]: new Set([
     BookingStatus.CONFIRMED,
+    BookingStatus.PENDING,
     BookingStatus.SEARCHING,
     BookingStatus.CUSTOMER_CANCELLED,
     BookingStatus.ADMIN_CANCELLED,
+    BookingStatus.BARBER_CANCELLED,
   ]),
   [BookingStatus.CONFIRMED]: new Set([
     BookingStatus.IN_PROGRESS,

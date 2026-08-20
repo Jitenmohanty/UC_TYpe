@@ -10,7 +10,6 @@ import { AdminDashboard } from './components/AdminDashboard';
 import { AuthModal } from './components/AuthModal';
 import type { User, ServiceItem, BarberProfile, Booking } from './types';
 import { authApi, servicesApi, bookingApi } from './services/api';
-import { connectSocket } from './services/socket';
 import { Sparkles, Calendar, KeyRound, Copy, CheckCircle2, Clock, ShieldCheck, MessageSquare, RefreshCw } from 'lucide-react';
 
 export function App() {
@@ -57,7 +56,6 @@ export function App() {
           if (u.role === 'ADMIN') {
             setActiveView('admin');
           }
-          connectSocket(token);
         })
         .catch(() => localStorage.removeItem('accessToken'));
     }
@@ -126,7 +124,6 @@ export function App() {
   const handleAuthSuccess = (u: User, token: string) => {
     setUser(u);
     localStorage.setItem('accessToken', token);
-    connectSocket(token);
     if (u.role === 'ADMIN') {
       setActiveView('admin');
     } else if (u.role === 'BARBER') {

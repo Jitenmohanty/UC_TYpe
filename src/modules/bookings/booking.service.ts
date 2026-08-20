@@ -40,6 +40,8 @@ export class BookingService {
 
     const scheduledEnd = addMinutes(scheduledStart, service.durationMinutes);
 
+    const initialStatus = input.preferredBarberId ? BookingStatus.OFFERED : BookingStatus.PENDING;
+
     // Create booking
     const booking = await bookingRepository.create({
       customerId,
@@ -62,28 +64,20 @@ export class BookingService {
       scheduledStart,
       scheduledEnd,
       timezone: input.timezone,
-      status: BookingStatus.SEARCHING,
+      status: initialStatus,
     });
 
-    // Enqueue allocation job if Redis is ready
-    if (getRedisStatus() === 'ready') {
-      try {
-        await allocationQueue.add('allocate-booking', {
-          bookingId: booking._id.toString(),
-          attemptNumber: 1,
-        });
-      } catch (err) {
-        logger.warn({ msg: 'Failed to enqueue allocation job (Redis offline?)', error: err });
-      }
+    // If customer selected a specific barber, create direct assignment for that barber
+    if (input.preferredBarberId) {
+      await assignmentRepository.create({
+        bookingId: booking._id,
+        barberId: new Types.ObjectId(input.preferredBarberId),
+        status: AssignmentStatus.OFFERED,
+        offeredAt: new Date(),
+        allocationAttempt: 1,
+      });
+      logger.info({ msg: 'Direct assignment created for preferred barber', bookingId: booking._id.toString(), barberId: input.preferredBarberId });
     }
-
-    logger.info({ msg: 'Booking created and queued for allocation', bookingId: booking._id.toString() });
-
-    // Emit socket event to customer
-    emitToUser(customerId.toString(), SocketEvents.BOOKING_CREATED, {
-      bookingId: booking._id.toString(),
-      status: BookingStatus.SEARCHING,
-    });
 
     await auditService.log({
       actorId: customerId,

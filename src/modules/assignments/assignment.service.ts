@@ -49,12 +49,6 @@ export class AssignmentService {
       );
     }
 
-    // Check offer hasn't expired
-    const offerAgeSeconds = (Date.now() - (assignment.offeredAt?.getTime() ?? 0)) / 1000;
-    if (offerAgeSeconds > env.ASSIGNMENT_OFFER_TIMEOUT_SECONDS) {
-      throw new ConflictError('Offer has expired', 'OFFER_EXPIRED');
-    }
-
     const booking = await bookingRepository.findByIdLean(assignment.bookingId as Types.ObjectId);
     if (!booking || booking.status === BookingStatus.CUSTOMER_CANCELLED) {
       throw new ConflictError('Booking is no longer active', 'BOOKING_INACTIVE');
@@ -264,10 +258,16 @@ export class AssignmentService {
       { rejectedAt: new Date(), cancellationReason: reason },
     );
 
-    // Trigger reallocation (excludes this barber via assignment history)
-    await allocationService.reallocate(assignment.bookingId.toString());
+    // Set booking back to PENDING so Admin can manually allocate another barber
+    try {
+      await bookingRepository.updateStatus(assignment.bookingId as Types.ObjectId, BookingStatus.PENDING, {
+        cancellationReason: reason,
+      } as any);
+    } catch {
+      // safe fallback
+    }
 
-    logger.info({ msg: 'Assignment rejected — reallocation triggered', assignmentId });
+    logger.info({ msg: 'Assignment rejected with reason', assignmentId, reason });
 
     return assignmentRepository.findById(assignmentId);
   }

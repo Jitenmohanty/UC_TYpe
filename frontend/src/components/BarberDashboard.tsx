@@ -1,7 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import type { BarberProfile, Assignment } from '../types';
 import { barbersApi, assignmentApi, bookingApi } from '../services/api';
-import { ShieldCheck, ToggleLeft, ToggleRight, MapPin, Navigation, Clock, CheckCircle2, XCircle, KeyRound, Loader2, Phone, ExternalLink, Calendar } from 'lucide-react';
+import { ShieldCheck, ToggleLeft, ToggleRight, MapPin, Navigation, Clock, CheckCircle2, XCircle, KeyRound, Loader2, Phone, ExternalLink, Calendar, RefreshCw, X } from 'lucide-react';
 
 interface BarberDashboardProps {
   user: any;
@@ -14,8 +14,13 @@ export const BarberDashboard: React.FC<BarberDashboardProps> = ({ user }) => {
   const [longitude, setLongitude] = useState<number>(-74.006);
   const [pendingAssignment, setPendingAssignment] = useState<Assignment | null>(null);
   const [activeAssignment, setActiveAssignment] = useState<Assignment | null>(null);
-  const [countdown, setCountdown] = useState<number>(30);
   const [statusMessage, setStatusMessage] = useState<string | null>(null);
+  const [refreshing, setRefreshing] = useState(false);
+
+  // Reject / Cancel with Reason state
+  const [rejectModalOpen, setRejectModalOpen] = useState(false);
+  const [rejectReason, setRejectReason] = useState('');
+  const [rejecting, setRejecting] = useState(false);
 
   // OTP verification state
   const [otpDigits, setOtpDigits] = useState<string[]>(['', '', '', '', '', '']);
@@ -38,8 +43,34 @@ export const BarberDashboard: React.FC<BarberDashboardProps> = ({ user }) => {
     }
   };
 
+  const refreshDashboard = async () => {
+    setRefreshing(true);
+    try {
+      const assignment = await assignmentApi.getPending();
+      if (assignment) {
+        if (assignment.status === 'OFFERED') {
+          setPendingAssignment(assignment);
+        } else if (['ACCEPTED', 'EN_ROUTE', 'ARRIVED', 'IN_PROGRESS'].includes(assignment.status)) {
+          setActiveAssignment(assignment);
+          if (assignment.status === 'ARRIVED') {
+            setShowOtpForm(true);
+          }
+        }
+      } else {
+        setPendingAssignment(null);
+      }
+      await fetchPastJobs();
+      setStatusMessage('Dashboard updated with latest booking records.');
+    } catch {
+      setStatusMessage('Dashboard refreshed.');
+    } finally {
+      setRefreshing(false);
+      setTimeout(() => setStatusMessage(null), 3000);
+    }
+  };
+
   useEffect(() => {
-    fetchPastJobs();
+    refreshDashboard();
     barbersApi.getMe()
       .then((data) => {
         setProfile(data);
@@ -61,39 +92,7 @@ export const BarberDashboard: React.FC<BarberDashboardProps> = ({ user }) => {
           serviceRadiusKm: 10,
         });
       });
-
-    // Fetch initial active or pending assignment from backend
-    assignmentApi.getPending()
-      .then((assignment) => {
-        if (!assignment) return;
-        if (assignment.status === 'OFFERED') {
-          setPendingAssignment(assignment);
-        } else if (['ACCEPTED', 'EN_ROUTE', 'ARRIVED', 'IN_PROGRESS'].includes(assignment.status)) {
-          setActiveAssignment(assignment);
-          if (assignment.status === 'ARRIVED') {
-            setShowOtpForm(true);
-          }
-        }
-      })
-      .catch(() => {});
   }, [user]);
-
-  useEffect(() => {
-    if (!pendingAssignment) return;
-    setCountdown(30);
-    const interval = setInterval(() => {
-      setCountdown((c) => {
-        if (c <= 1) {
-          clearInterval(interval);
-          setPendingAssignment(null);
-          return 0;
-        }
-        return c - 1;
-      });
-    }, 1000);
-
-    return () => clearInterval(interval);
-  }, [pendingAssignment]);
 
   const handleToggleAuto = async () => {
     const nextVal = !autoAllocation;
@@ -121,6 +120,7 @@ export const BarberDashboard: React.FC<BarberDashboardProps> = ({ user }) => {
       const res = await assignmentApi.accept(pendingAssignment._id);
       setActiveAssignment(res);
       setPendingAssignment(null);
+      setStatusMessage('Job accepted! Proceed to client doorstep.');
     } catch {
       setActiveAssignment({
         ...pendingAssignment,
@@ -130,12 +130,29 @@ export const BarberDashboard: React.FC<BarberDashboardProps> = ({ user }) => {
     }
   };
 
-  const handleRejectAssignment = async () => {
+  const handleRejectAssignment = () => {
+    setRejectModalOpen(true);
+  };
+
+  const handleRejectSubmit = async () => {
     if (!pendingAssignment) return;
+    setRejecting(true);
     try {
-      await assignmentApi.reject(pendingAssignment._id);
-    } catch {}
-    setPendingAssignment(null);
+      await assignmentApi.reject(
+        pendingAssignment._id,
+        rejectReason || 'Barber unavailable at the requested time',
+      );
+      setPendingAssignment(null);
+      setRejectModalOpen(false);
+      setRejectReason('');
+      setStatusMessage('Booking request rejected with reason.');
+      await refreshDashboard();
+    } catch (err: any) {
+      setStatusMessage(err?.response?.data?.error?.message || 'Failed to reject request');
+    } finally {
+      setRejecting(false);
+      setTimeout(() => setStatusMessage(null), 3500);
+    }
   };
 
   // ─── OTP digit input handler ─────────────────────────────────────────────────
@@ -265,19 +282,30 @@ export const BarberDashboard: React.FC<BarberDashboardProps> = ({ user }) => {
           </div>
         </div>
 
-        <div className="flex items-center gap-4 bg-obsidian-800/80 p-3 rounded-2xl border border-white/10">
-          <div>
-            <span className="text-xs font-bold text-white block">Accept Direct Bookings</span>
-            <span className="text-[10px] text-gray-400">Receive instant booking requests from nearby clients</span>
-          </div>
-
-          <button onClick={handleToggleAuto} className="text-purple-400 hover:text-purple-300 transition-colors">
-            {autoAllocation ? (
-              <ToggleRight className="w-10 h-10 text-purple-500" />
-            ) : (
-              <ToggleLeft className="w-10 h-10 text-gray-600" />
-            )}
+        <div className="flex flex-wrap items-center gap-3">
+          <button
+            onClick={refreshDashboard}
+            disabled={refreshing}
+            className="px-4 py-3 rounded-2xl bg-purple-600 hover:bg-purple-500 text-white text-xs font-bold transition-all flex items-center gap-2 shadow-lg shadow-purple-600/25 active:scale-95"
+          >
+            <RefreshCw className={`w-4 h-4 ${refreshing ? 'animate-spin' : ''}`} />
+            <span>Refresh Dashboard</span>
           </button>
+
+          <div className="flex items-center gap-4 bg-obsidian-800/80 p-2.5 rounded-2xl border border-white/10">
+            <div>
+              <span className="text-xs font-bold text-white block">Direct Bookings</span>
+              <span className="text-[10px] text-gray-400">Available to clients</span>
+            </div>
+
+            <button onClick={handleToggleAuto} className="text-purple-400 hover:text-purple-300 transition-colors">
+              {autoAllocation ? (
+                <ToggleRight className="w-9 h-9 text-purple-500" />
+              ) : (
+                <ToggleLeft className="w-9 h-9 text-gray-600" />
+              )}
+            </button>
+          </div>
         </div>
       </div>
 
@@ -588,56 +616,64 @@ export const BarberDashboard: React.FC<BarberDashboardProps> = ({ user }) => {
         </div>
       )}
 
-      {/* ─── Incoming Offer Modal with Full Customer & Address Details ────────── */}
+      {/* ─── Incoming Job Request Modal with Full Customer & Address Details ────────── */}
       {pendingAssignment && (() => {
         const booking = typeof pendingAssignment.bookingId === 'object' ? (pendingAssignment.bookingId as any) : null;
         const customer = booking?.customerId && typeof booking.customerId === 'object' ? booking.customerId : null;
-        const customerName = customer?.name || 'Customer';
-        const serviceName = booking?.serviceSnapshot?.name || 'Haircut & Beard Styling';
-        const price = booking?.serviceSnapshot?.price || 300;
+        const customerName = customer?.name || 'Valued Customer';
+        const serviceName = booking?.serviceSnapshot?.name || 'Executive Grooming Service';
+        const price = booking?.serviceSnapshot?.price || 399;
+        const duration = booking?.serviceSnapshot?.durationMinutes || 45;
+        const date = booking?.scheduledDate ? `${booking.scheduledDate} at ${booking.startTime}` : 'Requested Time';
         const coords = booking?.customerLocation?.coordinates || [longitude, latitude];
         const formattedAddr = booking?.addressSnapshot?.formattedAddress || `Coordinates: ${coords[1]?.toFixed(4)}, ${coords[0]?.toFixed(4)}`;
 
         return (
           <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/85 backdrop-blur-md">
-            <div className="glass-card rounded-3xl p-6 md:p-8 w-full max-w-md border-amber-500/40 space-y-6 text-center shadow-2xl shadow-amber-500/20 animate-bounce-short">
-              <div className="w-16 h-16 rounded-full bg-amber-500/20 border border-amber-500/40 flex items-center justify-center mx-auto text-amber-400 text-2xl font-extrabold animate-pulse">
-                {countdown}s
+            <div className="glass-card rounded-3xl p-6 md:p-8 w-full max-w-md border-amber-500/40 space-y-6 text-center shadow-2xl shadow-amber-500/20">
+              <div className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full bg-amber-500/20 text-amber-300 text-xs font-bold border border-amber-500/30">
+                <Clock className="w-3.5 h-3.5" />
+                <span>New Booking Offer</span>
               </div>
 
               <div>
-                <h3 className="text-xl font-extrabold font-outfit text-white">⚡ Incoming Job Request!</h3>
+                <h3 className="text-xl font-extrabold font-outfit text-white">Incoming Client Request</h3>
                 <p className="text-xs text-purple-300 font-semibold mt-1">
-                  {serviceName} • <span className="text-amber-400 font-bold">₹{price}</span>
+                  {serviceName} • <span className="text-amber-400 font-bold">₹{price}</span> ({duration} mins)
+                </p>
+                <p className="text-[11px] text-gray-400 mt-1">
+                  Scheduled for {date}
                 </p>
               </div>
 
               {/* Customer & Address Preview */}
-              <div className="bg-obsidian-800/90 p-4 rounded-2xl border border-white/10 text-left space-y-2.5 text-xs">
+              <div className="bg-obsidian-800/90 p-4 rounded-2xl border border-white/10 text-left space-y-3 text-xs">
                 <div>
-                  <span className="text-[10px] text-gray-400 uppercase font-semibold block">Client</span>
-                  <span className="font-bold text-white">{customerName}</span>
+                  <span className="text-[10px] text-gray-400 uppercase font-semibold block">Client Name</span>
+                  <span className="font-bold text-white text-sm">{customerName}</span>
                 </div>
                 <div>
                   <span className="text-[10px] text-gray-400 uppercase font-semibold block flex items-center gap-1">
                     <MapPin className="w-3 h-3 text-purple-400" />
-                    Delivery Address
+                    Doorstep Delivery Address
                   </span>
-                  <span className="text-gray-300 line-clamp-2">{formattedAddr}</span>
+                  <span className="text-gray-300 leading-relaxed block mt-0.5">{formattedAddr}</span>
                 </div>
               </div>
 
               <div className="grid grid-cols-2 gap-3 pt-2">
                 <button
+                  type="button"
                   onClick={handleRejectAssignment}
-                  className="py-3 rounded-xl bg-red-500/20 hover:bg-red-500 text-red-300 hover:text-white text-xs font-bold border border-red-500/30 transition-all flex items-center justify-center gap-1.5"
+                  className="py-3 rounded-xl bg-red-500/10 hover:bg-red-500/20 text-red-300 hover:text-red-200 text-xs font-bold border border-red-500/30 transition-all flex items-center justify-center gap-1.5"
                 >
-                  <XCircle className="w-4 h-4" /> Reject
+                  <XCircle className="w-4 h-4" /> Decline / Cancel
                 </button>
 
                 <button
+                  type="button"
                   onClick={handleAcceptAssignment}
-                  className="py-3 rounded-xl gradient-gold hover:opacity-95 text-black text-xs font-extrabold shadow-lg shadow-amber-500/30 flex items-center justify-center gap-1.5"
+                  className="py-3 rounded-xl gradient-gold hover:opacity-95 text-black text-xs font-extrabold shadow-lg shadow-amber-500/30 flex items-center justify-center gap-1.5 active:scale-95"
                 >
                   <CheckCircle2 className="w-4 h-4" /> Accept Job
                 </button>
@@ -646,6 +682,81 @@ export const BarberDashboard: React.FC<BarberDashboardProps> = ({ user }) => {
           </div>
         );
       })()}
+
+      {/* ─── Decline / Reject with Reason Modal ──────────────────────────────── */}
+      {rejectModalOpen && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/85 backdrop-blur-md animate-fade-in">
+          <div className="glass-card rounded-3xl p-6 md:p-8 w-full max-w-md border-red-500/40 space-y-5 text-left shadow-2xl">
+            <div className="flex items-center justify-between pb-3 border-b border-white/10">
+              <h3 className="text-lg font-bold text-white flex items-center gap-2">
+                <XCircle className="w-5 h-5 text-red-400" />
+                Decline Booking Request
+              </h3>
+              <button
+                onClick={() => setRejectModalOpen(false)}
+                className="p-1 rounded-lg text-gray-400 hover:text-white"
+              >
+                <X className="w-5 h-5" />
+              </button>
+            </div>
+
+            <p className="text-xs text-gray-300">
+              Select or provide a reason for declining. This updates the customer status and alerts the Admin to allocate another partner:
+            </p>
+
+            {/* Quick preset chips */}
+            <div className="flex flex-wrap gap-2">
+              {[
+                'Schedule conflict / Busy',
+                'Vehicle / Transport issue',
+                'Customer location is too far',
+                'Personal emergency',
+                'Tools / Equipment unavailable',
+              ].map((reasonChip) => (
+                <button
+                  key={reasonChip}
+                  type="button"
+                  onClick={() => setRejectReason(reasonChip)}
+                  className={`px-3 py-1.5 rounded-xl text-[11px] font-semibold transition-all border ${
+                    rejectReason === reasonChip
+                      ? 'bg-red-500/30 text-red-200 border-red-500/60 font-bold'
+                      : 'bg-obsidian-800/80 text-gray-400 border-white/5 hover:border-white/20'
+                  }`}
+                >
+                  {reasonChip}
+                </button>
+              ))}
+            </div>
+
+            <textarea
+              value={rejectReason}
+              onChange={(e) => setRejectReason(e.target.value)}
+              placeholder="Or write specific reason here..."
+              rows={3}
+              className="w-full p-3.5 rounded-2xl bg-obsidian-900 border border-white/10 text-xs text-white placeholder-gray-500 focus:border-red-500/60 outline-none"
+            />
+
+            <div className="grid grid-cols-2 gap-3 pt-2">
+              <button
+                type="button"
+                onClick={() => setRejectModalOpen(false)}
+                className="py-3 rounded-xl bg-white/5 hover:bg-white/10 text-gray-300 text-xs font-bold border border-white/10"
+              >
+                Go Back
+              </button>
+              <button
+                type="button"
+                onClick={handleRejectSubmit}
+                disabled={rejecting}
+                className="py-3 rounded-xl bg-red-600 hover:bg-red-500 text-white text-xs font-bold transition-all flex items-center justify-center gap-2 shadow-lg shadow-red-600/30"
+              >
+                {rejecting ? <Loader2 className="w-4 h-4 animate-spin" /> : <XCircle className="w-4 h-4" />}
+                Confirm Decline
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
 
       {/* ─── Completed Jobs & Earnings History ────────────────────────────────── */}
       <div className="glass-card p-6 md:p-8 rounded-3xl border-white/10 space-y-6">
