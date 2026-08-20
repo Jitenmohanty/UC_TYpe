@@ -1,8 +1,13 @@
 import { useState, useEffect } from 'react';
 import { Navbar } from './components/Navbar';
 import { Hero } from './components/Hero';
+import { BentoFeatures } from './components/BentoFeatures';
+import { HowItWorksFlow } from './components/HowItWorksFlow';
 import { ServiceCatalog } from './components/ServiceCatalog';
 import { NearbyBarbersRadar } from './components/NearbyBarbersRadar';
+import { TestimonialsMarquee } from './components/TestimonialsMarquee';
+import { FAQSection } from './components/FAQSection';
+import { WisprFloatingBar } from './components/WisprFloatingBar';
 import { BookingWizardModal } from './components/BookingWizardModal';
 import { CustomerBookingsModal } from './components/CustomerBookingsModal';
 import { BarberDashboard } from './components/BarberDashboard';
@@ -10,7 +15,7 @@ import { AdminDashboard } from './components/AdminDashboard';
 import { AuthModal } from './components/AuthModal';
 import type { User, ServiceItem, BarberProfile, Booking } from './types';
 import { authApi, servicesApi, bookingApi } from './services/api';
-import { Sparkles, Calendar, KeyRound, Copy, CheckCircle2, Clock, ShieldCheck, MessageSquare, RefreshCw } from 'lucide-react';
+import { Sparkles, Calendar, KeyRound, Copy, CheckCircle2, Clock, ShieldCheck, RefreshCw } from 'lucide-react';
 
 export function App() {
   const [user, setUser] = useState<User | null>(null);
@@ -60,109 +65,127 @@ export function App() {
         .catch(() => localStorage.removeItem('accessToken'));
     }
 
-    servicesApi.getAll()
-      .then((sList) => setServices(sList))
-      .catch(() => {});
+    servicesApi.getAll().then(setServices).catch(() => {});
   }, []);
 
-  // Fetch OTP when active booking becomes CONFIRMED
+  // Poll for active booking and OTP for customer
   useEffect(() => {
-    if (activeBooking?.status === 'CONFIRMED' && activeBooking._id) {
-      bookingApi.getOtp(activeBooking._id)
-        .then((data) => {
-          setCustomerOtp(data.otp);
-          setOtpExpiresAt(data.expiresAt);
-        })
-        .catch(() => {
-          // OTP not available yet
-        });
-    } else {
+    if (!user || user.role !== 'CUSTOMER') {
+      setActiveBooking(null);
       setCustomerOtp(null);
-      setOtpExpiresAt(null);
+      return;
     }
-  }, [activeBooking?.status, activeBooking?._id]);
 
-  // OTP countdown timer
-  useEffect(() => {
-    if (!otpExpiresAt) { setOtpTimeLeft(0); return; }
-    const updateTimer = () => {
-      const remaining = Math.max(0, Math.floor((new Date(otpExpiresAt).getTime() - Date.now()) / 1000));
-      setOtpTimeLeft(remaining);
+    const checkActiveBooking = async () => {
+      try {
+        const bookings = await bookingApi.getMyBookings();
+        const active = bookings.find((b: Booking) => 
+          ['PENDING', 'CONFIRMED', 'IN_PROGRESS', 'SEARCHING', 'BARBER_CANCELLED', 'ADMIN_CANCELLED'].includes(b.status)
+        );
+        setActiveBooking(active || null);
+
+        // If active confirmed booking, fetch OTP details for customer
+        if (active && (active.status === 'CONFIRMED' || active.status === 'IN_PROGRESS')) {
+          try {
+            const otpData = await bookingApi.getOtp(active._id);
+            if (otpData?.otp) {
+              setCustomerOtp(otpData.otp);
+              setOtpExpiresAt(otpData.expiresAt);
+            }
+          } catch {
+            // OTP might not be generated yet
+          }
+        } else {
+          setCustomerOtp(null);
+          setOtpExpiresAt(null);
+        }
+      } catch {
+        // Silently handle
+      }
     };
-    updateTimer();
-    const interval = setInterval(updateTimer, 1000);
+
+    checkActiveBooking();
+    const interval = setInterval(checkActiveBooking, 5000);
     return () => clearInterval(interval);
+  }, [user]);
+
+  // Countdown timer for OTP expiry
+  useEffect(() => {
+    if (!otpExpiresAt) {
+      setOtpTimeLeft(0);
+      return;
+    }
+
+    const updateTimer = () => {
+      const diff = Math.max(0, Math.floor((new Date(otpExpiresAt).getTime() - Date.now()) / 1000));
+      setOtpTimeLeft(diff);
+    };
+
+    updateTimer();
+    const timer = setInterval(updateTimer, 1000);
+    return () => clearInterval(timer);
   }, [otpExpiresAt]);
 
-  const handleCopyOtp = async () => {
-    if (!customerOtp) return;
-    try {
-      await navigator.clipboard.writeText(customerOtp);
+  const handleCopyOtp = () => {
+    if (customerOtp) {
+      navigator.clipboard.writeText(customerOtp);
       setOtpCopied(true);
       setTimeout(() => setOtpCopied(false), 2000);
-    } catch {
-      // fallback
     }
   };
 
   const handleResendOtp = async () => {
-    if (!activeBooking?._id || resendingSms) return;
+    if (!activeBooking) return;
     setResendingSms(true);
     try {
-      const data = await bookingApi.resendOtp(activeBooking._id);
-      setCustomerOtp(data.otp);
-      setOtpExpiresAt(data.expiresAt);
-      setToastMessage('📱 New OTP dispatched via Twilio SMS & updated in app!');
-    } catch (err: any) {
-      setToastMessage(err?.response?.data?.error?.message || 'Failed to resend SMS.');
+      const res = await bookingApi.resendOtp(activeBooking._id);
+      if (res?.otp) {
+        setCustomerOtp(res.otp);
+        setOtpExpiresAt(res.expiresAt);
+      }
+      setToastMessage('✅ New verification code sent via Twilio SMS');
+      setTimeout(() => setToastMessage(null), 4000);
+    } catch {
+      setToastMessage('Failed to resend SMS. Please try again.');
+      setTimeout(() => setToastMessage(null), 4000);
     } finally {
       setResendingSms(false);
-      setTimeout(() => setToastMessage(null), 4000);
     }
-  };
-
-  const handleAuthSuccess = (u: User, token: string) => {
-    setUser(u);
-    localStorage.setItem('accessToken', token);
-    if (u.role === 'ADMIN') {
-      setActiveView('admin');
-    } else if (u.role === 'BARBER') {
-      setActiveView('barber');
-    } else {
-      setActiveView('customer');
-    }
-    setToastMessage(`Welcome back, ${u.name}! Logged in as ${u.role}.`);
-    setTimeout(() => setToastMessage(null), 4000);
   };
 
   const handleLogout = () => {
-    authApi.logout().catch(() => {});
+    authApi.logout();
     setUser(null);
-    localStorage.removeItem('accessToken');
     setActiveView('customer');
-    setToastMessage('Logged out successfully.');
-    setTimeout(() => setToastMessage(null), 3000);
   };
 
-  const handleBookingCreated = (b: Booking) => {
-    setActiveBooking(b);
+  const handleAuthSuccess = (authUser: User) => {
+    setUser(authUser);
+    if (authUser.role === 'ADMIN') {
+      setActiveView('admin');
+    }
+  };
+
+  const handleBookingCreated = (newBooking: Booking) => {
+    setActiveBooking(newBooking);
     setIsBookingOpen(false);
-    setToastMessage(`Booking #${b.bookingNumber} created & auto-allocated!`);
-    setTimeout(() => setToastMessage(null), 5000);
+    setToastMessage(`🎉 Appointment #${newBooking.bookingNumber} created successfully!`);
+    setTimeout(() => setToastMessage(null), 4000);
   };
 
   const formatCountdown = (seconds: number) => {
     const m = Math.floor(seconds / 60);
     const s = seconds % 60;
-    return `${m}:${s.toString().padStart(2, '0')}`;
+    return `${m}:${s < 10 ? '0' : ''}${s}`;
   };
 
   return (
-    <div className="min-h-screen bg-[#070709] text-gray-100 flex flex-col selection:bg-purple-600 selection:text-white">
+    <div className="min-h-screen bg-[#0b0c10] text-slate-100 flex flex-col selection:bg-[#ff6c4c] selection:text-white font-sans relative overflow-x-hidden pb-20">
       
+      {/* Toast Notification */}
       {toastMessage && (
-        <div className="fixed top-20 right-6 z-50 glass-card px-5 py-3 rounded-2xl border-purple-500/40 text-purple-300 text-xs font-bold shadow-2xl flex items-center gap-2 animate-bounce-short">
-          <Sparkles className="w-4 h-4 text-amber-400" />
+        <div className="fixed top-20 right-6 z-50 glass-card px-5 py-3.5 rounded-2xl border-[#ff6c4c]/40 text-[#ff8a6a] text-xs font-bold shadow-2xl flex items-center gap-2.5 animate-bounce-short">
+          <Sparkles className="w-4 h-4 text-[#ff6c4c]" />
           <span>{toastMessage}</span>
         </div>
       )}
@@ -190,33 +213,42 @@ export function App() {
           <>
             {activeBooking && (
               <div className="max-w-7xl mx-auto px-4 md:px-8 pt-6 space-y-4">
-                {/* Active Booking Status Bar */}
-                <div className="glass-card p-4 rounded-2xl border-purple-500/30 bg-purple-950/20 flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4">
-                  <div className="flex items-center gap-3">
-                    <Calendar className="w-5 h-5 text-purple-400" />
+                {/* Active Booking Live Tracking Card */}
+                <div className="glass-card p-5 rounded-3xl border-[#ff6c4c]/30 bg-gradient-to-r from-[#ff6c4c]/10 via-[#10131d] to-[#10131d] flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4 shadow-xl">
+                  <div className="flex items-center gap-3.5">
+                    <div className="w-10 h-10 rounded-2xl gradient-flow text-white flex items-center justify-center font-extrabold shadow-md">
+                      <Calendar className="w-5 h-5" />
+                    </div>
                     <div>
-                      <span className="text-xs font-bold text-white block">Active Booking: #{activeBooking.bookingNumber}</span>
-                      <span className="text-[10px] text-gray-400">Scheduled for {activeBooking.scheduledDate} at {activeBooking.startTime}</span>
+                      <div className="flex items-center gap-2">
+                        <span className="text-xs font-extrabold text-white">Active Doorstep Booking</span>
+                        <span className="text-[10px] font-mono px-2 py-0.5 rounded-full bg-white/10 text-[#ff8a6a] font-bold">
+                          #{activeBooking.bookingNumber}
+                        </span>
+                      </div>
+                      <span className="text-[11px] text-gray-400 font-medium block mt-0.5">
+                        Scheduled for {activeBooking.scheduledDate} at {activeBooking.startTime}
+                      </span>
                     </div>
                   </div>
 
                   <div className="flex flex-wrap items-center gap-3">
                     <button
                       onClick={() => setIsHistoryOpen(true)}
-                      className="text-xs text-purple-300 hover:text-white underline font-medium"
+                      className="text-xs text-[#ff6c4c] hover:text-[#ff8a6a] underline font-bold"
                     >
                       View All My Bookings
                     </button>
-                    <span className={`px-3 py-1 rounded-full text-xs font-bold border ${
+                    <span className={`px-3.5 py-1.5 rounded-full text-xs font-bold border ${
                       activeBooking.status === 'CONFIRMED'
-                        ? 'bg-green-500/20 text-green-300 border-green-500/40'
+                        ? 'bg-emerald-500/20 text-emerald-300 border-emerald-500/40'
                         : activeBooking.status === 'IN_PROGRESS'
-                        ? 'bg-purple-500/20 text-purple-300 border-purple-500/40 animate-pulse'
+                        ? 'bg-[#ff6c4c]/20 text-[#ff8a6a] border-[#ff6c4c]/40 animate-pulse'
                         : activeBooking.status === 'ADMIN_CANCELLED'
                         ? 'bg-rose-500/20 text-rose-300 border-rose-500/40'
                         : activeBooking.status === 'BARBER_CANCELLED' || activeBooking.status === 'SEARCHING'
                         ? 'bg-amber-500/20 text-amber-300 border-amber-500/40'
-                        : 'bg-purple-500/20 text-purple-300 border-purple-500/30'
+                        : 'bg-[#ff6c4c]/20 text-[#ff8a6a] border-[#ff6c4c]/30'
                     }`}>
                       {activeBooking.status === 'ADMIN_CANCELLED'
                         ? `Cancelled by Admin ${activeBooking.cancellationReason ? `(${activeBooking.cancellationReason})` : ''}`
@@ -231,86 +263,81 @@ export function App() {
 
                 {/* ─── OTP Display Card (Customer) ────────────────────────────────── */}
                 {activeBooking.status === 'CONFIRMED' && customerOtp && (
-                  <div className="glass-card p-6 rounded-2xl border-amber-500/30 bg-gradient-to-br from-amber-950/30 via-purple-950/20 to-obsidian-900">
+                  <div className="glass-card p-6 sm:p-8 rounded-3xl border-[#ff6c4c]/40 bg-gradient-to-br from-[#ff6c4c]/15 via-[#10131d] to-[#10131d] shadow-2xl">
                     <div className="flex flex-col md:flex-row items-center gap-6">
                       {/* Icon + Header */}
                       <div className="flex flex-col items-center gap-3 flex-shrink-0">
-                        <div className="w-16 h-16 rounded-full bg-amber-500/20 border-2 border-amber-500/40 flex items-center justify-center">
-                          <KeyRound className="w-8 h-8 text-amber-400" />
+                        <div className="w-16 h-16 rounded-2xl gradient-flow text-white flex items-center justify-center shadow-lg shadow-[#ff6c4c]/20">
+                          <KeyRound className="w-8 h-8" />
                         </div>
-                        <div className="flex items-center gap-1 text-[10px] text-amber-300/70">
-                          <ShieldCheck className="w-3 h-3" />
-                          <span>Secure Verification</span>
+                        <div className="flex items-center gap-1 text-[10px] text-[#ff8a6a] font-bold">
+                          <ShieldCheck className="w-3.5 h-3.5 text-[#ff6c4c]" />
+                          <span>Sterile Verification</span>
                         </div>
                       </div>
 
                       {/* OTP Display */}
                       <div className="flex-1 text-center md:text-left space-y-3">
                         <div>
-                          <h3 className="text-sm font-bold font-outfit text-white">Your Service Verification Code</h3>
-                          <p className="text-[10px] text-gray-400 mt-0.5">
-                            Share this code with your barber when they arrive to start the service
+                          <h3 className="text-base font-extrabold font-outfit text-white">Your Doorstep Service OTP</h3>
+                          <p className="text-xs text-gray-400 mt-0.5">
+                            Share this secure 6-digit code with your barber upon arrival to initiate your service
                           </p>
                         </div>
 
                         <div className="flex flex-wrap items-center justify-center md:justify-start gap-3">
                           {/* Large OTP Digits */}
-                          <div className="flex gap-1.5">
+                          <div className="flex gap-2">
                             {customerOtp.split('').map((digit, i) => (
                               <div
                                 key={i}
-                                className="w-11 h-14 rounded-xl bg-obsidian-800/80 border-2 border-amber-500/40 flex items-center justify-center text-2xl font-extrabold text-amber-300 shadow-lg shadow-amber-500/10"
+                                className="w-10 h-12 rounded-xl bg-white/[0.06] border border-[#ff6c4c]/40 text-[#ff8a6a] font-extrabold text-xl font-mono flex items-center justify-center shadow-inner"
                               >
                                 {digit}
                               </div>
                             ))}
                           </div>
 
-                          {/* Action Buttons */}
-                          <div className="flex items-center gap-2">
-                            {/* Copy Button */}
-                            <button
-                              onClick={handleCopyOtp}
-                              className={`p-2.5 rounded-xl border transition-all ${
-                                otpCopied
-                                  ? 'bg-green-500/20 border-green-500/40 text-green-300'
-                                  : 'bg-white/5 border-white/10 text-gray-400 hover:border-amber-500/40 hover:text-amber-300'
-                              }`}
-                              title="Copy OTP"
-                            >
-                              {otpCopied ? <CheckCircle2 className="w-5 h-5" /> : <Copy className="w-5 h-5" />}
-                            </button>
+                          {/* Copy Button */}
+                          <button
+                            onClick={handleCopyOtp}
+                            className="flex items-center gap-1.5 px-4 py-2.5 rounded-xl bg-[#13151f] hover:bg-[#1b1f2e] border border-white/[0.08] text-xs font-bold text-gray-200 transition-all active:scale-95"
+                          >
+                            {otpCopied ? (
+                              <>
+                                <CheckCircle2 className="w-4 h-4 text-emerald-400" />
+                                <span className="text-emerald-400">Copied!</span>
+                              </>
+                            ) : (
+                              <>
+                                <Copy className="w-4 h-4 text-[#ff6c4c]" />
+                                <span>Copy Code</span>
+                              </>
+                            )}
+                          </button>
 
-                            {/* Resend via Twilio SMS Button */}
-                            <button
-                              onClick={handleResendOtp}
-                              disabled={resendingSms}
-                              className="px-3 py-2.5 rounded-xl bg-purple-500/10 border border-purple-500/30 text-purple-300 hover:bg-purple-500/20 text-xs font-semibold flex items-center gap-1.5 transition-all"
-                              title="Resend OTP via Twilio SMS"
-                            >
-                              <RefreshCw className={`w-3.5 h-3.5 ${resendingSms ? 'animate-spin' : ''}`} />
-                              <span>{resendingSms ? 'Sending SMS...' : 'Resend SMS'}</span>
-                            </button>
-                          </div>
+                          {/* Resend Twilio SMS Button */}
+                          <button
+                            onClick={handleResendOtp}
+                            disabled={resendingSms}
+                            className="flex items-center gap-1.5 px-4 py-2.5 rounded-xl gradient-flow text-white hover:opacity-95 text-xs font-extrabold transition-all shadow-md shadow-[#ff6c4c]/20 active:scale-95 disabled:opacity-50"
+                          >
+                            <RefreshCw className={`w-4 h-4 ${resendingSms ? 'animate-spin' : ''}`} />
+                            <span>{resendingSms ? 'Sending SMS...' : 'Resend Twilio SMS'}</span>
+                          </button>
                         </div>
 
-                        {/* Twilio SMS Dispatch Inform Flow Banner */}
-                        <div className="flex items-center gap-2 text-[11px] text-purple-300/80 bg-purple-950/40 px-3 py-1.5 rounded-xl border border-purple-500/20 w-fit">
-                          <MessageSquare className="w-3.5 h-3.5 text-purple-400" />
-                          <span>Dispatched via <strong>Twilio SMS</strong> to your registered mobile number</span>
+                        {/* Twilio SMS Dispatch indicator */}
+                        <div className="flex items-center justify-center md:justify-start gap-1.5 text-[11px] text-emerald-400 font-semibold pt-1">
+                          <CheckCircle2 className="w-3.5 h-3.5" />
+                          <span>Dispatched via <strong>Twilio SMS</strong> to your registered phone</span>
                         </div>
 
                         {/* Timer */}
                         {otpTimeLeft > 0 && (
-                          <div className="flex items-center gap-1.5 text-[10px] text-gray-400">
-                            <Clock className="w-3 h-3" />
-                            <span>Expires in <span className="text-amber-300 font-bold">{formatCountdown(otpTimeLeft)}</span></span>
-                          </div>
-                        )}
-                        {otpTimeLeft <= 0 && otpExpiresAt && (
-                          <div className="flex items-center gap-1.5 text-[10px] text-red-400">
-                            <Clock className="w-3 h-3" />
-                            <span>OTP expired — click Resend SMS to get a new code</span>
+                          <div className="flex items-center justify-center md:justify-start gap-1.5 text-xs text-gray-400">
+                            <Clock className="w-3.5 h-3.5 text-[#ff6c4c]" />
+                            <span>Expires in <span className="text-[#ff8a6a] font-extrabold">{formatCountdown(otpTimeLeft)}</span></span>
                           </div>
                         )}
                       </div>
@@ -320,6 +347,7 @@ export function App() {
               </div>
             )}
 
+            {/* 1. Wispr Flow Editorial Hero */}
             <Hero
               onOpenBooking={() => {
                 if (!user) {
@@ -333,6 +361,13 @@ export function App() {
               }}
             />
 
+            {/* 2. Wispr Flow Bento Features Grid */}
+            <BentoFeatures />
+
+            {/* 3. Wispr Flow 3-Step Journey */}
+            <HowItWorksFlow />
+
+            {/* 4. Curated Service Catalog */}
             <ServiceCatalog
               services={services}
               onSelectService={(service) => {
@@ -347,6 +382,7 @@ export function App() {
               }}
             />
 
+            {/* 5. Live Barber Radar */}
             <NearbyBarbersRadar
               onSelectBarber={(barber) => {
                 if (!user) {
@@ -358,6 +394,37 @@ export function App() {
                 setSelectedService(null);
                 setIsBookingOpen(true);
               }}
+            />
+
+            {/* 6. Testimonials & Home Visits */}
+            <TestimonialsMarquee />
+
+            {/* 7. Frequently Asked Questions Accordion */}
+            <FAQSection />
+
+            {/* 8. Fixed Bottom Wispr Flow Dispatch Bar */}
+            <WisprFloatingBar
+              onOpenBooking={() => {
+                if (!user) {
+                  setAuthPromptMessage('Please sign in to book an appointment.');
+                  setIsAuthOpen(true);
+                  return;
+                }
+                setSelectedService(null);
+                setSelectedBarber(null);
+                setIsBookingOpen(true);
+              }}
+              onSelectService={(service) => {
+                if (!user) {
+                  setAuthPromptMessage(`Please sign in to book ${service.name}.`);
+                  setIsAuthOpen(true);
+                  return;
+                }
+                setSelectedService(service);
+                setSelectedBarber(null);
+                setIsBookingOpen(true);
+              }}
+              services={services}
             />
           </>
         )}
@@ -395,15 +462,41 @@ export function App() {
         initialMessage={authPromptMessage}
       />
 
-      <footer className="py-12 border-t border-white/10 bg-[#050507] mt-auto">
-        <div className="max-w-7xl mx-auto px-4 md:px-8 flex flex-col md:flex-row items-center justify-between gap-4 text-xs text-gray-500">
-          <div>
-            © 2026 AURA Studio Inc. All rights reserved. Luxury Mobile Salon & Barber Booking.
+      {/* Luxury Footer */}
+      <footer className="py-16 border-t border-white/[0.08] bg-[#07080c] mt-auto text-xs text-gray-400">
+        <div className="max-w-7xl mx-auto px-4 md:px-8 space-y-8">
+          <div className="flex flex-col md:flex-row items-start md:items-center justify-between gap-6 pb-8 border-b border-white/[0.06]">
+            <div>
+              <div className="flex items-center gap-2">
+                <span className="text-xl font-extrabold font-outfit text-white">AURA FLOW</span>
+                <span className="text-[10px] font-extrabold px-2 py-0.5 rounded-full bg-[#ff6c4c]/15 text-[#ff8a6a] border border-[#ff6c4c]/30">
+                  DOORSTEP SALON
+                </span>
+              </div>
+              <p className="text-xs text-gray-400 mt-1">
+                Luxury mobile barbering and grooming experiences delivered to your doorstep in Brahmapur & Bhubaneswar.
+              </p>
+            </div>
+
+            <div className="flex flex-wrap items-center gap-4 text-xs font-semibold text-gray-300">
+              <span className="flex items-center gap-1.5 text-emerald-400">
+                <CheckCircle2 className="w-4 h-4" /> 100% Sanitized Toolkits
+              </span>
+              <span className="flex items-center gap-1.5 text-[#ff8a6a]">
+                <ShieldCheck className="w-4 h-4 text-[#ff6c4c]" /> Background-Verified Pros
+              </span>
+            </div>
           </div>
-          <div className="flex items-center gap-6">
-            <a href="#" className="hover:text-purple-400 transition-colors">Privacy Policy</a>
-            <a href="#" className="hover:text-purple-400 transition-colors">Terms of Service</a>
-            <a href="#" className="hover:text-purple-400 transition-colors">Partner Portal</a>
+
+          <div className="flex flex-col sm:flex-row items-center justify-between gap-4 text-[11px] text-gray-500">
+            <div>
+              © 2026 AURA Flow Technologies Inc. All rights reserved.
+            </div>
+            <div className="flex items-center gap-6">
+              <a href="#" className="hover:text-[#ff6c4c] transition-colors">Privacy Policy</a>
+              <a href="#" className="hover:text-[#ff6c4c] transition-colors">Terms of Service</a>
+              <a href="#" className="hover:text-[#ff6c4c] transition-colors">Partner With Us</a>
+            </div>
           </div>
         </div>
       </footer>

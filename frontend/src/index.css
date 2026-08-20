@@ -1,80 +1,121 @@
+@import url('https://fonts.googleapis.com/css2?family=EB+Garamond:ital,wght@0,400;0,500;0,600;0,700;0,800;1,400;1,500;1,600;1,700&family=Plus+Jakarta+Sans:wght@300;400;500;600;700;800&family=JetBrains+Mono:wght@400;500;600&family=Outfit:wght@400;500;600;700;800;900&display=swap');
+
 @tailwind base;
 @tailwind components;
 @tailwind utilities;
 
 @layer base {
   body {
-    background-color: #070709;
-    color: #F3F4F6;
-    font-family: 'Inter', sans-serif;
+    background-color: #0b0c10;
+    color: #e2e8f0;
+    font-family: 'Plus Jakarta Sans', sans-serif;
+    letter-spacing: -0.01em;
   }
   h1, h2, h3, h4, h5, h6 {
     font-family: 'Outfit', sans-serif;
+    letter-spacing: -0.02em;
+  }
+  .font-editorial {
+    font-family: 'EB Garamond', serif;
   }
 }
 
 @layer utilities {
+  /* Wispr Flow Ultra-Refined Frosted Cards */
   .glass-card {
-    background: rgba(18, 18, 26, 0.65);
-    backdrop-filter: blur(16px);
-    -webkit-backdrop-filter: blur(16px);
+    background: rgba(16, 18, 26, 0.76);
+    backdrop-filter: blur(24px);
+    -webkit-backdrop-filter: blur(24px);
     border: 1px solid rgba(255, 255, 255, 0.08);
+    box-shadow: 0 12px 36px -12px rgba(0, 0, 0, 0.6), 0 1px 2px 0 rgba(0, 0, 0, 0.3);
   }
 
   .glass-card-hover {
-    transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+    transition: all 0.3s cubic-bezier(0.16, 1, 0.3, 1);
   }
 
   .glass-card-hover:hover {
-    background: rgba(30, 30, 42, 0.85);
-    border-color: rgba(139, 92, 246, 0.35);
-    box-shadow: 0 10px 40px -10px rgba(139, 92, 246, 0.3);
-    transform: translateY(-4px);
+    background: rgba(22, 26, 38, 0.88);
+    border-color: rgba(255, 108, 76, 0.35);
+    box-shadow: 0 24px 48px -16px rgba(0, 0, 0, 0.8), 0 0 25px -5px rgba(255, 108, 76, 0.18);
+    transform: translateY(-3px);
   }
 
   .glass-input {
     background: rgba(255, 255, 255, 0.04);
     border: 1px solid rgba(255, 255, 255, 0.1);
-    color: #F9FAFB;
-    backdrop-filter: blur(8px);
+    color: #f8fafc;
+    backdrop-filter: blur(10px);
+    transition: all 0.2s ease;
   }
 
   .glass-input:focus {
-    border-color: #8B5CF6;
+    background: rgba(255, 255, 255, 0.07);
+    border-color: #ff6c4c;
     outline: none;
-    box-shadow: 0 0 0 2px rgba(139, 92, 246, 0.25);
+    box-shadow: 0 0 0 3px rgba(255, 108, 76, 0.2);
+  }
+
+  /* Wispr Flow Signature Sunset Coral & Flow Gradients */
+  .gradient-flow {
+    background: linear-gradient(135deg, #ff8a6a 0%, #ff6c4c 50%, #e54d2e 100%);
+  }
+
+  .gradient-flow-subtle {
+    background: linear-gradient(135deg, rgba(255, 108, 76, 0.16) 0%, rgba(229, 77, 46, 0.05) 100%);
+  }
+
+  .gradient-gold {
+    background: linear-gradient(135deg, #ff8a6a 0%, #ff6c4c 50%, #e54d2e 100%);
   }
 
   .gradient-text {
-    background: linear-gradient(135deg, #FFFFFF 0%, #C084FC 50%, #F59E0B 100%);
+    background: linear-gradient(135deg, #ffffff 0%, #ffe5df 40%, #ff6c4c 100%);
     -webkit-background-clip: text;
     -webkit-text-fill-color: transparent;
   }
 
-  .gradient-gold {
-    background: linear-gradient(135deg, #F59E0B 0%, #D97706 100%);
+  .gradient-text-flow {
+    background: linear-gradient(135deg, #ffffff 0%, #ffd4cb 35%, #ff6c4c 100%);
+    -webkit-background-clip: text;
+    -webkit-text-fill-color: transparent;
   }
 
-  .gradient-purple {
-    background: linear-gradient(135deg, #8B5CF6 0%, #6D28D9 100%);
+  /* Wispr Flow Ambient Light Orbs */
+  .ambient-glow-flow {
+    background: radial-gradient(circle, rgba(255, 108, 76, 0.14) 0%, rgba(0, 0, 0, 0) 70%);
   }
 
-  .neon-border {
-    box-shadow: 0 0 20px rgba(139, 92, 246, 0.4);
+  .ambient-glow-gold {
+    background: radial-gradient(circle, rgba(255, 108, 76, 0.12) 0%, rgba(0, 0, 0, 0) 70%);
+  }
+
+  .ambient-glow-purple {
+    background: radial-gradient(circle, rgba(99, 102, 241, 0.08) 0%, rgba(0, 0, 0, 0) 70%);
   }
 }
 
-/* Custom Scrollbar */
+/* Custom Sleek Scrollbar */
 ::-webkit-scrollbar {
-  width: 8px;
+  width: 7px;
+  height: 7px;
 }
 ::-webkit-scrollbar-track {
-  background: #070709;
+  background: #0b0c10;
 }
 ::-webkit-scrollbar-thumb {
-  background: #1E1E2A;
-  border-radius: 4px;
+  background: #1d2130;
+  border-radius: 9999px;
 }
 ::-webkit-scrollbar-thumb:hover {
-  background: #8B5CF6;
+  background: #ff6c4c;
+}
+
+@keyframes pulse-subtle {
+  0%, 100% { opacity: 1; transform: scale(1); }
+  50% { opacity: 0.85; transform: scale(1.02); }
+}
+
+.animate-pulse-subtle {
+  animation: pulse-subtle 3s ease-in-out infinite;
 }

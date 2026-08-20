@@ -1,5 +1,5 @@
 import React from 'react';
-import { User as UserIcon, LogOut, Calendar, MapPin, Shield, Clock } from 'lucide-react';
+import { User as UserIcon, LogOut, Calendar, MapPin, Shield, Clock, Sparkles } from 'lucide-react';
 import type { User } from '../types';
 
 interface NavbarProps {
@@ -22,52 +22,76 @@ export const Navbar: React.FC<NavbarProps> = ({
   setActiveView,
 }) => {
   return (
-    <header className="sticky top-0 z-50 bg-[#070709]/85 backdrop-blur-xl border-b border-white/10 px-4 md:px-8 py-3 transition-all">
-      <div className="max-w-7xl mx-auto flex items-center justify-between">
+    <header className="sticky top-0 z-50 bg-[#0b0c10]/90 backdrop-blur-2xl border-b border-white/[0.08] px-4 md:px-8 py-3.5 transition-all">
+      <div className="max-w-7xl mx-auto flex items-center justify-between gap-4">
         
-        {/* Brand Logo & Image */}
-        <div className="flex items-center gap-3 cursor-pointer group" onClick={() => window.scrollTo({ top: 0, behavior: 'smooth' })}>
-          <div className="relative w-10 h-10 rounded-xl overflow-hidden shadow-lg shadow-purple-500/20 group-hover:scale-105 transition-transform border border-purple-500/30">
-            <img src="/logo.png" alt="AURA Studio Logo" className="w-full h-full object-cover" />
+        {/* Brand Logo & Location Pill */}
+        <div className="flex items-center gap-4">
+          <div
+            className="flex items-center gap-3 cursor-pointer group"
+            onClick={() => window.scrollTo({ top: 0, behavior: 'smooth' })}
+          >
+            <div className="relative w-9 h-9 rounded-xl overflow-hidden shadow-lg shadow-[#ff6c4c]/20 group-hover:scale-105 transition-transform bg-gradient-to-br from-[#ff8a6a] via-[#ff6c4c] to-[#e54d2e] p-0.5">
+              <div className="w-full h-full bg-[#0e1017] rounded-[10px] flex items-center justify-center">
+                <span className="text-base font-extrabold text-[#ff6c4c] font-outfit">A</span>
+              </div>
+            </div>
+            <div>
+              <div className="flex items-center gap-1.5">
+                <span className="text-lg font-extrabold font-outfit tracking-tight text-white">
+                  AURA
+                </span>
+                <span className="text-[9px] font-extrabold px-2 py-0.5 rounded-full bg-[#ff6c4c]/15 text-[#ff6c4c] border border-[#ff6c4c]/30 tracking-wider uppercase">
+                  FLOW
+                </span>
+              </div>
+              <span className="text-[10px] text-gray-400 font-medium tracking-tight block">
+                Doorstep Salon & Grooming
+              </span>
+            </div>
           </div>
-          <div>
-            <span className="text-xl font-extrabold font-outfit tracking-wider text-white flex items-center gap-1.5">
-              AURA <span className="text-[10px] px-2 py-0.5 rounded-full bg-purple-500/20 text-purple-400 border border-purple-500/30">STUDIO</span>
-            </span>
-            <span className="text-[10px] text-gray-400 tracking-widest block font-inter uppercase">Luxury Mobile Salon & Grooming</span>
+
+          {/* Location Chip */}
+          <div className="hidden lg:flex items-center gap-2 px-3 py-1.5 rounded-full bg-white/[0.04] border border-white/[0.08] text-xs text-gray-300">
+            <span className="w-2 h-2 rounded-full bg-[#ff6c4c] animate-pulse"></span>
+            <MapPin className="w-3.5 h-3.5 text-[#ff6c4c]" />
+            <span className="font-semibold text-white">Brahmapur, Odisha</span>
+            <span className="text-[10px] text-[#ff6c4c] font-bold bg-[#ff6c4c]/10 px-1.5 py-0.5 rounded-md">Live GPS</span>
           </div>
         </div>
 
         {/* Navigation Links */}
-        <nav className="hidden md:flex items-center gap-8 text-sm font-medium text-gray-300">
-          <a href="#services" className="hover:text-purple-400 transition-colors">Services</a>
-          <a href="#radar" className="hover:text-purple-400 transition-colors flex items-center gap-1.5">
-            <MapPin className="w-4 h-4 text-purple-400" />
-            Find Barbers
+        <nav className="hidden md:flex items-center gap-7 text-xs font-semibold tracking-wide text-gray-300">
+          <a href="#services" className="hover:text-[#ff6c4c] transition-colors">
+            Services & Packages
+          </a>
+          <a href="#radar" className="hover:text-[#ff6c4c] transition-colors flex items-center gap-1.5">
+            <Sparkles className="w-3.5 h-3.5 text-[#ff6c4c]" />
+            Live Barbers Radar
           </a>
         </nav>
 
         {/* Action Buttons & Role Selector */}
-        <div className="flex items-center gap-3">
+        <div className="flex items-center gap-2.5">
           {user && (user.role === 'ADMIN' || user.role === 'BARBER') && (
-            <div className="bg-obsidian-800/80 p-1 rounded-xl border border-white/10 flex items-center text-xs font-semibold">
+            <div className="bg-[#13151f] p-1 rounded-2xl border border-white/[0.08] flex items-center text-xs font-bold shadow-inner">
               <button
                 onClick={() => setActiveView('customer')}
-                className={`px-3 py-1.5 rounded-lg transition-all ${
+                className={`px-3 py-1.5 rounded-xl transition-all ${
                   activeView === 'customer'
-                    ? 'bg-purple-600 text-white shadow-md'
+                    ? 'bg-white/10 text-white shadow-sm'
                     : 'text-gray-400 hover:text-white'
                 }`}
               >
-                Customer View
+                Client View
               </button>
 
               {user.role === 'BARBER' && (
                 <button
                   onClick={() => setActiveView('barber')}
-                  className={`px-3 py-1.5 rounded-lg transition-all flex items-center gap-1 ${
+                  className={`px-3 py-1.5 rounded-xl transition-all flex items-center gap-1.5 ${
                     activeView === 'barber'
-                      ? 'bg-amber-500 text-black font-bold shadow-md'
+                      ? 'gradient-flow text-white font-extrabold shadow-md'
                       : 'text-gray-400 hover:text-white'
                   }`}
                 >
@@ -80,9 +104,9 @@ export const Navbar: React.FC<NavbarProps> = ({
                 <>
                   <button
                     onClick={() => setActiveView('barber')}
-                    className={`px-3 py-1.5 rounded-lg transition-all flex items-center gap-1 ${
+                    className={`px-3 py-1.5 rounded-xl transition-all flex items-center gap-1.5 ${
                       activeView === 'barber'
-                        ? 'bg-amber-500 text-black font-bold shadow-md'
+                        ? 'gradient-flow text-white font-extrabold shadow-md'
                         : 'text-gray-400 hover:text-white'
                     }`}
                   >
@@ -91,13 +115,13 @@ export const Navbar: React.FC<NavbarProps> = ({
                   </button>
                   <button
                     onClick={() => setActiveView('admin')}
-                    className={`px-3 py-1.5 rounded-lg transition-all flex items-center gap-1 ${
+                    className={`px-3 py-1.5 rounded-xl transition-all flex items-center gap-1.5 ${
                       activeView === 'admin'
-                        ? 'bg-purple-600 text-white font-bold shadow-md'
-                        : 'text-amber-400 hover:text-white'
+                        ? 'bg-[#ff6c4c]/20 text-[#ff6c4c] border border-[#ff6c4c]/40'
+                        : 'text-[#ff6c4c] hover:text-white'
                     }`}
                   >
-                    👑 Admin Console
+                    👑 Admin
                   </button>
                 </>
               )}
@@ -107,36 +131,36 @@ export const Navbar: React.FC<NavbarProps> = ({
           {user && onOpenMyBookings && (
             <button
               onClick={onOpenMyBookings}
-              className="hidden sm:flex items-center gap-1.5 bg-obsidian-800 hover:bg-obsidian-700 text-purple-300 hover:text-white font-bold text-xs px-3.5 py-2 rounded-xl transition-all border border-purple-500/30"
+              className="hidden sm:flex items-center gap-1.5 bg-[#13151f] hover:bg-[#1b1f2e] text-gray-200 hover:text-white font-bold text-xs px-3.5 py-2.5 rounded-xl transition-all border border-white/[0.08]"
             >
-              <Clock className="w-3.5 h-3.5 text-purple-400" />
+              <Clock className="w-3.5 h-3.5 text-[#ff6c4c]" />
               <span>My Bookings</span>
             </button>
           )}
 
           <button
             onClick={onOpenBooking}
-            className="hidden sm:flex items-center gap-2 gradient-gold hover:opacity-95 text-black font-bold text-sm px-4 py-2 rounded-xl transition-all shadow-lg shadow-amber-500/20 hover:scale-105 active:scale-95"
+            className="flex items-center gap-2 gradient-flow hover:opacity-95 text-white font-extrabold text-xs sm:text-sm px-4 sm:px-5 py-2.5 rounded-xl transition-all shadow-lg shadow-[#ff6c4c]/25 active:scale-95"
           >
             <Calendar className="w-4 h-4" />
-            Book Appointment
+            <span>Book Service</span>
           </button>
 
           {user ? (
             <div className="flex items-center gap-2">
-              <div className="flex items-center gap-2 bg-obsidian-800 px-3 py-1.5 rounded-xl border border-white/10">
-                <div className="w-7 h-7 rounded-full bg-purple-600/30 text-purple-300 border border-purple-500/40 flex items-center justify-center font-bold text-xs">
+              <div className="flex items-center gap-2.5 bg-[#13151f] px-3 py-1.5 rounded-xl border border-white/[0.08]">
+                <div className="w-7 h-7 rounded-lg gradient-flow text-white flex items-center justify-center font-extrabold text-xs shadow-md">
                   {user.name.charAt(0)}
                 </div>
                 <div className="hidden md:block text-left">
-                  <span className="text-xs font-semibold text-gray-200 block">{user.name}</span>
-                  <span className="text-[9px] text-purple-400 font-bold uppercase block">{user.role}</span>
+                  <span className="text-xs font-bold text-gray-200 block truncate max-w-[100px]">{user.name}</span>
+                  <span className="text-[9px] text-[#ff6c4c] font-extrabold uppercase block">{user.role}</span>
                 </div>
               </div>
               <button
                 onClick={onLogout}
-                title="Logout"
-                className="p-2 rounded-xl bg-obsidian-800 hover:bg-red-500/20 text-gray-400 hover:text-red-400 border border-white/10 transition-colors"
+                title="Sign Out"
+                className="p-2.5 rounded-xl bg-[#13151f] hover:bg-red-500/20 text-gray-400 hover:text-red-300 border border-white/[0.08] transition-colors"
               >
                 <LogOut className="w-4 h-4" />
               </button>
@@ -144,10 +168,10 @@ export const Navbar: React.FC<NavbarProps> = ({
           ) : (
             <button
               onClick={onOpenAuth}
-              className="flex items-center gap-2 bg-purple-600 hover:bg-purple-500 text-white font-bold text-xs px-4 py-2.5 rounded-xl transition-all shadow-lg shadow-purple-600/20 hover:scale-105 active:scale-95"
+              className="flex items-center gap-2 bg-[#181d2c] hover:bg-[#20273b] text-white font-bold text-xs px-4 py-2.5 rounded-xl transition-all border border-white/10 active:scale-95"
             >
-              <UserIcon className="w-4 h-4 text-purple-200" />
-              Sign In / Register
+              <UserIcon className="w-4 h-4 text-[#ff6c4c]" />
+              Sign In
             </button>
           )}
         </div>
