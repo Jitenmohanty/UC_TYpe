@@ -37,7 +37,7 @@ export const AuthModal: React.FC<AuthModalProps> = ({
   if (!isOpen) return null;
 
   const [mode, setMode] = useState<'login' | 'register' | 'forgot_password'>('login');
-  const [role, setRole] = useState<'CUSTOMER' | 'BARBER' | 'ADMIN'>('CUSTOMER');
+  const [role, setRole] = useState<'CUSTOMER' | 'BARBER'>('CUSTOMER');
 
   // Form fields
   const [name, setName] = useState('');
@@ -107,25 +107,6 @@ export const AuthModal: React.FC<AuthModalProps> = ({
     }
     return () => clearInterval(timer);
   }, [mode, forgotStep, otpExpiresIn]);
-
-  const handleFillDemo = (demoRole: 'ADMIN' | 'CUSTOMER' | 'BARBER') => {
-    setMode('login');
-    setError(null);
-    setSuccessMsg(null);
-    if (demoRole === 'ADMIN') {
-      setEmail('admin@salonbooking.com');
-      setPassword('Admin@123');
-      setRole('ADMIN');
-    } else if (demoRole === 'CUSTOMER') {
-      setEmail('priya@example.com');
-      setPassword('Customer@123');
-      setRole('CUSTOMER');
-    } else {
-      setEmail('amit.kumar@salonbooking.com');
-      setPassword('Barber@123');
-      setRole('BARBER');
-    }
-  };
 
   const handleAuthSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -324,38 +305,7 @@ export const AuthModal: React.FC<AuthModalProps> = ({
           )}
         </div>
 
-        {/* Quick Demo Credentials Fill Pills (Login/Register mode only) */}
-        {mode !== 'forgot_password' && (
-          <div className="px-6 pt-4 flex items-center justify-between gap-2 text-[11px] font-semibold text-gray-400">
-            <span className="flex items-center gap-1 text-purple-300">
-              <Sparkles className="w-3.5 h-3.5 text-amber-400" />
-              Demo Autofill:
-            </span>
-            <div className="flex items-center gap-1.5">
-              <button
-                type="button"
-                onClick={() => handleFillDemo('ADMIN')}
-                className="px-2.5 py-1 rounded-lg bg-amber-500/20 hover:bg-amber-500 text-amber-300 hover:text-black border border-amber-500/30 transition-all font-bold"
-              >
-                Admin
-              </button>
-              <button
-                type="button"
-                onClick={() => handleFillDemo('CUSTOMER')}
-                className="px-2.5 py-1 rounded-lg bg-purple-500/20 hover:bg-purple-500 text-purple-300 hover:text-white border border-purple-500/30 transition-all font-bold"
-              >
-                Customer
-              </button>
-              <button
-                type="button"
-                onClick={() => handleFillDemo('BARBER')}
-                className="px-2.5 py-1 rounded-lg bg-blue-500/20 hover:bg-blue-500 text-blue-300 hover:text-white border border-blue-500/30 transition-all font-bold"
-              >
-                Barber
-              </button>
-            </div>
-          </div>
-        )}
+
 
         {/* Alerts & Messages */}
         <div className="px-6 pt-3">

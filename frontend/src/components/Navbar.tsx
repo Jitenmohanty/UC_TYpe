@@ -47,7 +47,7 @@ export const Navbar: React.FC<NavbarProps> = ({
 
         {/* Action Buttons & Role Selector */}
         <div className="flex items-center gap-3">
-          {user && (
+          {user && (user.role === 'ADMIN' || user.role === 'BARBER') && (
             <div className="bg-obsidian-800/80 p-1 rounded-xl border border-white/10 flex items-center text-xs font-semibold">
               <button
                 onClick={() => setActiveView('customer')}
@@ -60,29 +60,44 @@ export const Navbar: React.FC<NavbarProps> = ({
                 Customer View
               </button>
 
-              <button
-                onClick={() => setActiveView('barber')}
-                className={`px-3 py-1.5 rounded-lg transition-all flex items-center gap-1 ${
-                  activeView === 'barber'
-                    ? 'bg-amber-500 text-black font-bold shadow-md'
-                    : 'text-gray-400 hover:text-white'
-                }`}
-              >
-                <Shield className="w-3.5 h-3.5" />
-                Barber Portal
-              </button>
-
-              {user.role === 'ADMIN' && (
+              {user.role === 'BARBER' && (
                 <button
-                  onClick={() => setActiveView('admin')}
+                  onClick={() => setActiveView('barber')}
                   className={`px-3 py-1.5 rounded-lg transition-all flex items-center gap-1 ${
-                    activeView === 'admin'
-                      ? 'bg-red-500 text-white font-bold shadow-md'
-                      : 'text-amber-400 hover:text-white'
+                    activeView === 'barber'
+                      ? 'bg-amber-500 text-black font-bold shadow-md'
+                      : 'text-gray-400 hover:text-white'
                   }`}
                 >
-                  👑 Admin Portal
+                  <Shield className="w-3.5 h-3.5" />
+                  Barber Portal
                 </button>
+              )}
+
+              {user.role === 'ADMIN' && (
+                <>
+                  <button
+                    onClick={() => setActiveView('barber')}
+                    className={`px-3 py-1.5 rounded-lg transition-all flex items-center gap-1 ${
+                      activeView === 'barber'
+                        ? 'bg-amber-500 text-black font-bold shadow-md'
+                        : 'text-gray-400 hover:text-white'
+                    }`}
+                  >
+                    <Shield className="w-3.5 h-3.5" />
+                    Barber View
+                  </button>
+                  <button
+                    onClick={() => setActiveView('admin')}
+                    className={`px-3 py-1.5 rounded-lg transition-all flex items-center gap-1 ${
+                      activeView === 'admin'
+                        ? 'bg-purple-600 text-white font-bold shadow-md'
+                        : 'text-amber-400 hover:text-white'
+                    }`}
+                  >
+                    👑 Admin Console
+                  </button>
+                </>
               )}
             </div>
           )}
