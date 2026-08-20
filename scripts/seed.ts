@@ -63,39 +63,55 @@ async function seed(): Promise<void> {
   // ─── Create Services ────────────────────────────────────────────────────────
   const services = await ServiceModel.insertMany([
     {
-      name: 'Haircut',
-      description: 'Classic haircut with styling',
-      price: 300,
+      name: 'Executive Haircut & Styling',
+      description: 'Custom precision haircut tailored to face structure, organic shampoo, scalp massage & hot towel styling finish.',
+      price: 399,
       durationMinutes: 45,
       status: ServiceStatus.ACTIVE,
       categoryId: 'hair',
     },
     {
-      name: 'Shave',
-      description: 'Traditional hot towel shave',
-      price: 150,
+      name: 'Beard Sculpting & Hot Oil Spa',
+      description: 'Razor edge lining, hot oil beard treatment, trimming, and luxury hydrating balm application.',
+      price: 249,
       durationMinutes: 30,
       status: ServiceStatus.ACTIVE,
-      categoryId: 'grooming',
+      categoryId: 'beard',
     },
     {
-      name: 'Haircut + Shave',
-      description: 'Complete grooming package',
-      price: 400,
+      name: 'Full Royal Deluxe Package',
+      description: 'Executive haircut, beard sculpting, charcoal facial detox mask, eyebrow trimming & neck tension massage.',
+      price: 699,
       durationMinutes: 75,
       status: ServiceStatus.ACTIVE,
       categoryId: 'package',
     },
     {
-      name: 'Hair Color',
-      description: 'Full hair coloring service',
-      price: 800,
-      durationMinutes: 120,
+      name: 'Haircut + Beard Glow Duo',
+      description: 'Complete grooming combo including custom haircut, beard trim, razor cleanup & styling.',
+      price: 499,
+      durationMinutes: 60,
       status: ServiceStatus.ACTIVE,
-      categoryId: 'hair',
+      categoryId: 'package',
+    },
+    {
+      name: 'Scalp Detox & Hair Spa Treatment',
+      description: 'Deep root scalp cleansing, nourishing hair spa mask, warm steam infusion and head massage.',
+      price: 599,
+      durationMinutes: 50,
+      status: ServiceStatus.ACTIVE,
+      categoryId: 'spa',
+    },
+    {
+      name: 'Classic Hot Towel Razor Shave',
+      description: 'Traditional straight razor shave with essential oils, hot lather, cold compress, and soothing aftershave balm.',
+      price: 199,
+      durationMinutes: 25,
+      status: ServiceStatus.ACTIVE,
+      categoryId: 'beard',
     },
   ]);
-  logger.info({ msg: `✅ ${services.length} services created` });
+  logger.info({ msg: `✅ ${services.length} luxury services created` });
 
   const haircutService = services[0]!;
 

@@ -1,11 +1,12 @@
 import React from 'react';
-import { User as UserIcon, LogOut, Calendar, MapPin, Shield } from 'lucide-react';
+import { User as UserIcon, LogOut, Calendar, MapPin, Shield, Clock } from 'lucide-react';
 import type { User } from '../types';
 
 interface NavbarProps {
   user: User | null;
   onOpenAuth: () => void;
   onOpenBooking: () => void;
+  onOpenMyBookings?: () => void;
   onLogout: () => void;
   activeView: 'customer' | 'barber' | 'admin';
   setActiveView: (view: 'customer' | 'barber' | 'admin') => void;
@@ -15,6 +16,7 @@ export const Navbar: React.FC<NavbarProps> = ({
   user,
   onOpenAuth,
   onOpenBooking,
+  onOpenMyBookings,
   onLogout,
   activeView,
   setActiveView,
@@ -100,6 +102,16 @@ export const Navbar: React.FC<NavbarProps> = ({
                 </>
               )}
             </div>
+          )}
+
+          {user && onOpenMyBookings && (
+            <button
+              onClick={onOpenMyBookings}
+              className="hidden sm:flex items-center gap-1.5 bg-obsidian-800 hover:bg-obsidian-700 text-purple-300 hover:text-white font-bold text-xs px-3.5 py-2 rounded-xl transition-all border border-purple-500/30"
+            >
+              <Clock className="w-3.5 h-3.5 text-purple-400" />
+              <span>My Bookings</span>
+            </button>
           )}
 
           <button

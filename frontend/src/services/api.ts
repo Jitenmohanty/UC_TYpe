@@ -116,6 +116,10 @@ export const barbersApi = {
     const res = await api.patch('/barbers/me/auto-allocation', { enabled });
     return res.data.data;
   },
+  getMyBookings: async (params?: { page?: number; limit?: number }) => {
+    const res = await api.get('/barbers/me/bookings', { params });
+    return res.data.data;
+  },
 };
 
 // Booking API

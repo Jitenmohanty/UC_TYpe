@@ -4,6 +4,7 @@ import { Hero } from './components/Hero';
 import { ServiceCatalog } from './components/ServiceCatalog';
 import { NearbyBarbersRadar } from './components/NearbyBarbersRadar';
 import { BookingWizardModal } from './components/BookingWizardModal';
+import { CustomerBookingsModal } from './components/CustomerBookingsModal';
 import { BarberDashboard } from './components/BarberDashboard';
 import { AdminDashboard } from './components/AdminDashboard';
 import { AuthModal } from './components/AuthModal';
@@ -21,6 +22,7 @@ export function App() {
   const [isAuthOpen, setIsAuthOpen] = useState(false);
   const [authPromptMessage, setAuthPromptMessage] = useState<string | null>(null);
   const [isBookingOpen, setIsBookingOpen] = useState(false);
+  const [isHistoryOpen, setIsHistoryOpen] = useState(false);
   const [selectedService, setSelectedService] = useState<ServiceItem | null>(null);
   const [selectedBarber, setSelectedBarber] = useState<BarberProfile | null>(null);
   const [toastMessage, setToastMessage] = useState<string | null>(null);
@@ -176,6 +178,7 @@ export function App() {
           setSelectedBarber(null);
           setIsBookingOpen(true);
         }}
+        onOpenMyBookings={() => setIsHistoryOpen(true)}
         onLogout={handleLogout}
         activeView={activeView}
         setActiveView={setActiveView}
@@ -191,7 +194,7 @@ export function App() {
             {activeBooking && (
               <div className="max-w-7xl mx-auto px-4 md:px-8 pt-6 space-y-4">
                 {/* Active Booking Status Bar */}
-                <div className="glass-card p-4 rounded-2xl border-purple-500/30 bg-purple-950/20 flex items-center justify-between">
+                <div className="glass-card p-4 rounded-2xl border-purple-500/30 bg-purple-950/20 flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4">
                   <div className="flex items-center gap-3">
                     <Calendar className="w-5 h-5 text-purple-400" />
                     <div>
@@ -199,9 +202,18 @@ export function App() {
                       <span className="text-[10px] text-gray-400">Scheduled for {activeBooking.scheduledDate} at {activeBooking.startTime}</span>
                     </div>
                   </div>
-                  <span className="px-3 py-1 rounded-full bg-purple-500/20 text-purple-300 text-xs font-bold border border-purple-500/30">
-                    Status: {activeBooking.status}
-                  </span>
+
+                  <div className="flex items-center gap-3">
+                    <button
+                      onClick={() => setIsHistoryOpen(true)}
+                      className="text-xs text-purple-300 hover:text-white underline font-medium"
+                    >
+                      View All My Bookings
+                    </button>
+                    <span className="px-3 py-1 rounded-full bg-purple-500/20 text-purple-300 text-xs font-bold border border-purple-500/30">
+                      Status: {activeBooking.status}
+                    </span>
+                  </div>
                 </div>
 
                 {/* ─── OTP Display Card (Customer) ────────────────────────────────── */}
@@ -345,6 +357,19 @@ export function App() {
         selectedBarber={selectedBarber}
         services={services}
         onBookingCreated={handleBookingCreated}
+      />
+
+      <CustomerBookingsModal
+        isOpen={isHistoryOpen}
+        onClose={() => setIsHistoryOpen(false)}
+        onSelectRebook={(serviceId) => {
+          const s = services.find((srv) => srv._id === serviceId);
+          if (s) {
+            setSelectedService(s);
+            setSelectedBarber(null);
+            setIsBookingOpen(true);
+          }
+        }}
       />
 
       <AuthModal

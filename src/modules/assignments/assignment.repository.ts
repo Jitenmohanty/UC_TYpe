@@ -129,7 +129,7 @@ export class AssignmentRepository {
   async findByBarberAndStatus(
     barberId: Types.ObjectId | string,
     statuses: AssignmentStatus[],
-    limit = 20,
+    limit = 50,
   ): Promise<IAssignment[]> {
     return AssignmentModel.find({
       barberId,
@@ -137,7 +137,13 @@ export class AssignmentRepository {
     })
       .sort({ createdAt: -1 })
       .limit(limit)
-      .populate('bookingId')
+      .populate({
+        path: 'bookingId',
+        populate: [
+          { path: 'customerId', select: 'name email phone' },
+          { path: 'serviceId', select: 'name price durationMinutes' },
+        ],
+      })
       .exec();
   }
 
