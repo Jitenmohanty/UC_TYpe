@@ -4,11 +4,12 @@ import { userRepository } from '../users/user.repository';
 import { ServiceModel } from '../services/service.model';
 import { BarberServiceModel } from '../barberServices/barberService.model';
 import { availabilityService } from '../availability/availability.service';
-import { candidateService } from '../allocation/candidate.service';
-import { rankingService } from '../allocation/ranking.service';
-import { NotFoundError, ForbiddenError, ValidationError } from '../../common/errors/AppError';
-import { BarberStatus } from '../../common/constants/roles';
-import { validateCoordinates, toGeoPoint } from '../../common/utils/distance';
+import { assignmentService } from '../assignments/assignment.service';
+import { AssignmentSource } from '../assignments/assignment.model';
+import { bookingRepository } from '../bookings/booking.repository';
+import { NotFoundError, ValidationError } from '../../common/errors/AppError';
+import { UserRole } from '../../common/constants/roles';
+import { validateCoordinates } from '../../common/utils/distance';
 import { env } from '../../config/env';
 import type { PaginationQuery } from '../../common/types/global';
 
@@ -26,12 +27,15 @@ export class BarberService {
     return profile;
   }
 
-  async updateMyProfile(userId: Types.ObjectId, data: Partial<{
-    bio: string;
-    experienceYears: number;
-    serviceRadiusKm: number;
-    workingHours: unknown;
-  }>) {
+  async updateMyProfile(
+    userId: Types.ObjectId,
+    data: Partial<{
+      bio: string;
+      experienceYears: number;
+      serviceRadiusKm: number;
+      workingHours: unknown;
+    }>,
+  ) {
     return barberProfileRepository.updateByUserId(userId, data as never);
   }
 
@@ -46,13 +50,22 @@ export class BarberService {
     return barberProfileRepository.updateLocation(profile._id, longitude, latitude);
   }
 
-  async toggleAutoAllocation(userId: Types.ObjectId, enabled: boolean) {
+  /**
+   * Toggle whether this barber is offered to customers and assignable by admin.
+   * (Field is still named autoAllocationEnabled for schema compatibility.)
+   */
+  async setAcceptingBookings(userId: Types.ObjectId, enabled: boolean) {
     const profile = await barberProfileRepository.findByUserId(userId);
     if (!profile) throw new NotFoundError('Barber profile');
 
     return barberProfileRepository.updateAutoAllocation(profile._id, enabled);
   }
 
+  /**
+   * Customer-facing barber search: active, bookable barbers near a point,
+   * nearest first. Optionally narrowed to those who offer a given service and
+   * are free at a given date/time.
+   */
   async getNearbyBarbers(params: {
     latitude: number;
     longitude: number;
@@ -67,77 +80,70 @@ export class BarberService {
 
     const radiusKm = Math.min(params.radiusKm ?? env.DEFAULT_ALLOCATION_RADIUS_KM, 50);
 
+    // $geoNear already returns nearest-first, so no extra ranking pass is needed.
     const nearby = await barberProfileRepository.findNearby(
       params.longitude,
       params.latitude,
       radiusKm,
     );
 
-    // If service + time filtering requested, apply availability checks
-    if (params.serviceId && params.date && params.startTime) {
-      const service = await ServiceModel.findById(params.serviceId).exec();
-      if (!service) throw new NotFoundError('Service');
-
-      const filtered = [];
-      for (const barber of nearby) {
-        const offersService = await BarberServiceModel.exists({
-          barberId: barber._id,
-          serviceId: params.serviceId,
-          isActive: true,
-        });
-        if (!offersService) continue;
-
-        const { available } = await availabilityService.isBarberAvailableForSlot(
-          barber,
-          params.date,
-          params.startTime,
-          service.durationMinutes,
-        );
-        if (!available) continue;
-
-        filtered.push(barber);
-      }
-
-      return rankingService.rank(
-        filtered.map((b) => ({ profile: b, distanceKm: b.distanceKm ?? 0 })),
-      );
+    if (!params.serviceId || !params.date || !params.startTime) {
+      return nearby;
     }
 
-    return nearby;
+    const service = await ServiceModel.findById(params.serviceId).exec();
+    if (!service) throw new NotFoundError('Service');
+
+    const available = [];
+    for (const barber of nearby) {
+      const offersService = await BarberServiceModel.exists({
+        barberId: barber._id,
+        serviceId: params.serviceId,
+        isActive: true,
+      });
+      if (!offersService) continue;
+
+      const { available: free } = await availabilityService.isBarberAvailableForSlot(
+        barber,
+        params.date,
+        params.startTime,
+        service.durationMinutes,
+      );
+      if (!free) continue;
+
+      available.push(barber);
+    }
+
+    return available;
   }
 
-  async getMyBookings(userId: Types.ObjectId, pagination: PaginationQuery) {
+  /** The open pool of bookings still waiting for a barber. */
+  async getOpenBookings(pagination: PaginationQuery) {
+    return bookingRepository.findOpenPool(pagination);
+  }
+
+  /**
+   * Barber takes a booking from the open pool.
+   *
+   * Goes through the same locked, transactional path as an admin assignment, so
+   * two barbers racing for one booking cannot both win.
+   */
+  async claimBooking(userId: Types.ObjectId, bookingId: string) {
     const profile = await barberProfileRepository.findByUserId(userId);
-    const barberIds: (Types.ObjectId | string)[] = [userId];
-    if (profile) barberIds.push(profile._id);
+    if (!profile) throw new NotFoundError('Barber profile');
 
-    const { AssignmentModel } = await import('../assignments/assignment.model');
-    const { AssignmentStatus } = await import('../../common/constants/assignmentStates');
+    return assignmentService.assignBarber({
+      bookingId,
+      barberProfileId: profile._id,
+      source: AssignmentSource.BARBER_CLAIM,
+      actorId: userId,
+      actorRole: UserRole.BARBER,
+    });
+  }
 
-    const limit = pagination.limit ?? 50;
-    const assignments = await AssignmentModel.find({
-      barberId: { $in: barberIds },
-      status: {
-        $in: [
-          AssignmentStatus.ACCEPTED,
-          AssignmentStatus.COMPLETED,
-          AssignmentStatus.CANCELLED_BY_BARBER,
-          AssignmentStatus.OFFERED,
-        ],
-      },
-    })
-      .sort({ createdAt: -1 })
-      .limit(limit)
-      .populate({
-        path: 'bookingId',
-        populate: [
-          { path: 'customerId', select: 'name email phone' },
-          { path: 'serviceId', select: 'name price durationMinutes' },
-        ],
-      })
-      .exec();
-
-    return assignments;
+  /** This barber's job history, newest first. */
+  async getMyBookings(userId: Types.ObjectId, pagination: PaginationQuery) {
+    return assignmentService.getMyAssignments(userId, pagination.limit ?? 50);
   }
 }
 

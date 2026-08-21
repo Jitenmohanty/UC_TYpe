@@ -1,5 +1,5 @@
 import React from 'react';
-import { User as UserIcon, LogOut, Calendar, MapPin, Shield, Clock, Sparkles } from 'lucide-react';
+import { User as UserIcon, LogOut, Calendar, MapPin, Shield, Clock, Scissors } from 'lucide-react';
 import type { User } from '../types';
 
 interface NavbarProps {
@@ -7,6 +7,7 @@ interface NavbarProps {
   onOpenAuth: () => void;
   onOpenBooking: () => void;
   onOpenMyBookings?: () => void;
+  onOpenServices: () => void;
   onLogout: () => void;
   activeView: 'customer' | 'barber' | 'admin';
   setActiveView: (view: 'customer' | 'barber' | 'admin') => void;
@@ -17,6 +18,7 @@ export const Navbar: React.FC<NavbarProps> = ({
   onOpenAuth,
   onOpenBooking,
   onOpenMyBookings,
+  onOpenServices,
   onLogout,
   activeView,
   setActiveView,
@@ -29,7 +31,10 @@ export const Navbar: React.FC<NavbarProps> = ({
         <div className="flex items-center gap-4">
           <div
             className="flex items-center gap-3 cursor-pointer group"
-            onClick={() => window.scrollTo({ top: 0, behavior: 'smooth' })}
+            onClick={() => {
+              setActiveView('customer');
+              window.scrollTo({ top: 0, behavior: 'smooth' });
+            }}
           >
             <div className="relative w-9 h-9 rounded-xl overflow-hidden shadow-lg shadow-[#ff6c4c]/20 group-hover:scale-105 transition-transform bg-gradient-to-br from-[#ff8a6a] via-[#ff6c4c] to-[#e54d2e] p-0.5">
               <div className="w-full h-full bg-[#0e1017] rounded-[10px] flex items-center justify-center">
@@ -61,14 +66,17 @@ export const Navbar: React.FC<NavbarProps> = ({
         </div>
 
         {/* Navigation Links */}
-        <nav className="hidden md:flex items-center gap-7 text-xs font-semibold tracking-wide text-gray-300">
-          <a href="#services" className="hover:text-[#ff6c4c] transition-colors">
-            Services & Packages
-          </a>
-          <a href="#radar" className="hover:text-[#ff6c4c] transition-colors flex items-center gap-1.5">
-            <Sparkles className="w-3.5 h-3.5 text-[#ff6c4c]" />
-            Live Barbers Radar
-          </a>
+        <nav className="hidden md:flex items-center gap-4 text-xs font-semibold tracking-wide text-gray-300">
+          <button
+            onClick={onOpenServices}
+            className="hover:text-[#ff6c4c] hover:bg-white/[0.04] px-3.5 py-2 rounded-xl transition-all flex items-center gap-2 active:scale-95 group"
+          >
+            <Scissors className="w-3.5 h-3.5 text-[#ff6c4c]" />
+            <span className="group-hover:text-[#ff8a6a] transition-colors font-bold">Services & Packages</span>
+            <span className="text-[9px] font-extrabold px-1.5 py-0.2 rounded-md bg-[#ff6c4c]/15 text-[#ff8a6a] border border-[#ff6c4c]/30">
+              Menu
+            </span>
+          </button>
         </nav>
 
         {/* Action Buttons & Role Selector */}

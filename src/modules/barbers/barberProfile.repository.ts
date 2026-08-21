@@ -75,8 +75,11 @@ export class BarberProfileRepository {
   }
 
   /**
-   * Geospatial query — find barbers within radius of a point
-   * Returns results sorted by distance (nearest first)
+   * Geospatial query — active, bookable barbers within radius of a point,
+   * nearest first.
+   *
+   * `autoAllocationEnabled` here means "accepting bookings" (see the field note
+   * on IBarberProfile) — it gates whether a barber is offered to customers.
    */
   async findNearby(
     longitude: number,
@@ -109,14 +112,22 @@ export class BarberProfileRepository {
           distanceKm: { $divide: ['$distanceMeters', 1000] },
         },
       },
+      { $lookup: { from: 'users', localField: 'userId', foreignField: '_id', as: 'user' } },
+      { $unwind: { path: '$user', preserveNullAndEmptyArrays: true } },
+      { $project: { 'user.passwordHash': 0, 'user.__v': 0 } },
     ]).exec() as Promise<(IBarberProfile & { distanceKm?: number })[]>;
   }
 
   async incrementStats(
-    barberId: Types.ObjectId | string,
-    field: 'totalOffered' | 'totalAccepted' | 'totalCompletedJobs' | 'totalCancellations',
+    barberProfileId: Types.ObjectId | string,
+    field:
+      | 'totalOffered'
+      | 'totalAccepted'
+      | 'totalRejected'
+      | 'totalCompletedJobs'
+      | 'totalCancellations',
   ): Promise<void> {
-    await BarberProfileModel.findByIdAndUpdate(barberId, {
+    await BarberProfileModel.findByIdAndUpdate(barberProfileId, {
       $inc: { [field]: 1 },
     }).exec();
   }

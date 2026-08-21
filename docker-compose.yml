@@ -46,24 +46,6 @@ services:
       - salon_network
     command: node dist/server.js
 
-  worker:
-    build:
-      context: .
-      target: production
-    container_name: salon_worker
-    restart: unless-stopped
-    env_file:
-      - .env
-    environment:
-      MONGODB_URI: mongodb://mongodb:27017/salon_booking
-      REDIS_URL: redis://redis:6379
-    depends_on:
-      - mongodb
-      - redis
-    networks:
-      - salon_network
-    command: node dist/worker.js
-
 volumes:
   mongodb_data:
   redis_data:

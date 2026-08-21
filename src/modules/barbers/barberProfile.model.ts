@@ -12,7 +12,15 @@ export interface IBarberProfile extends Document {
   totalCompletedJobs: number;
   totalAccepted: number;
   totalOffered: number;
+  totalRejected: number;
   totalCancellations: number;
+  /**
+   * Barber is accepting new work: they appear in the customer-facing "nearby
+   * barbers" search and can be hand-assigned by an admin.
+   *
+   * NOTE: the name is historical — it used to gate the removed auto-allocation
+   * engine. It is now purely an availability switch.
+   */
   autoAllocationEnabled: boolean;
   serviceRadiusKm: number;
   currentLocation?: {
@@ -56,6 +64,7 @@ const barberProfileSchema = new Schema<IBarberProfile>(
     totalCompletedJobs: { type: Number, default: 0 },
     totalAccepted: { type: Number, default: 0 },
     totalOffered: { type: Number, default: 0 },
+    totalRejected: { type: Number, default: 0 },
     totalCancellations: { type: Number, default: 0 },
     autoAllocationEnabled: { type: Boolean, default: false },
     serviceRadiusKm: { type: Number, default: 5, min: 1, max: 50 },

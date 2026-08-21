@@ -1,12 +1,13 @@
 import React from 'react';
 import { Canvas3D } from './Canvas3D';
-import { Sparkles, Zap, ShieldCheck, MapPin, Clock, ArrowRight, Star, CheckCircle2 } from 'lucide-react';
+import { Sparkles, Zap, Scissors, ArrowRight, Star, CheckCircle2, Clock, ShieldCheck } from 'lucide-react';
 
 interface HeroProps {
   onOpenBooking: () => void;
+  onOpenServices?: () => void;
 }
 
-export const Hero: React.FC<HeroProps> = ({ onOpenBooking }) => {
+export const Hero: React.FC<HeroProps> = ({ onOpenBooking, onOpenServices }) => {
   return (
     <section className="relative min-h-[88vh] flex items-center justify-center pt-8 pb-16 overflow-hidden">
       {/* Wispr Flow Ambient Backlights */}
@@ -45,13 +46,15 @@ export const Hero: React.FC<HeroProps> = ({ onOpenBooking }) => {
               <ArrowRight className="w-4 h-4 group-hover:translate-x-1 transition-transform" />
             </button>
 
-            <a
-              href="#radar"
-              className="w-full sm:w-auto glass-card hover:bg-white/[0.08] text-gray-200 font-bold px-7 py-4 rounded-2xl text-sm sm:text-base border border-white/[0.12] transition-all flex items-center justify-center gap-2 active:scale-95"
-            >
-              <MapPin className="w-4 h-4 text-[#ff6c4c]" />
-              <span>Live Barbers Radar</span>
-            </a>
+            {onOpenServices && (
+              <button
+                onClick={onOpenServices}
+                className="w-full sm:w-auto glass-card hover:bg-white/[0.08] text-gray-200 font-bold px-7 py-4 rounded-2xl text-sm sm:text-base border border-white/[0.12] transition-all flex items-center justify-center gap-2 active:scale-95 group"
+              >
+                <Scissors className="w-4 h-4 text-[#ff6c4c] group-hover:rotate-12 transition-transform" />
+                <span>Services & Packages</span>
+              </button>
+            )}
           </div>
 
           {/* Trust Metrics Grid */}

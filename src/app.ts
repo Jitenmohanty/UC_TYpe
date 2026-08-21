@@ -31,23 +31,27 @@ export function createApp(): Application {
     }),
   );
 
-  const allowedOrigins = env.CORS_ORIGIN
-    ? env.CORS_ORIGIN.split(',').map((s) => s.trim())
-    : ['*'];
+  const allowedOrigins = env.CORS_ORIGIN.split(',')
+    .map((s) => s.trim())
+    .filter(Boolean);
+
+  const allowAll = allowedOrigins.includes('*');
+  const isLocalhost = (origin: string): boolean =>
+    /^https?:\/\/(localhost|127\.0\.0\.1)(:\d+)?$/.test(origin);
 
   app.use(
     cors({
       origin: (origin, callback) => {
-        // Allow requests with no origin (e.g. mobile apps, curl, Postman, server-to-server)
+        // No Origin header: same-origin, curl, Postman, server-to-server.
         if (!origin) return callback(null, true);
-        if (allowedOrigins.includes('*') || allowedOrigins.includes(origin)) {
+        if (allowAll || allowedOrigins.includes(origin)) return callback(null, true);
+        // Convenience for local dev only — never in production.
+        if (env.NODE_ENV !== 'production' && isLocalhost(origin)) {
           return callback(null, true);
         }
-        // Allow localhost and 127.0.0.1 on any port in development
-        if (/^https?:\/\/(localhost|127\.0\.0\.1)(:\d+)?$/.test(origin)) {
-          return callback(null, true);
-        }
-        return callback(null, true);
+        // Reject: previously every branch here returned `true`, which silently
+        // made CORS_ORIGIN a no-op and allowed any origin.
+        return callback(null, false);
       },
       credentials: true,
       methods: ['GET', 'POST', 'PUT', 'PATCH', 'DELETE', 'OPTIONS'],

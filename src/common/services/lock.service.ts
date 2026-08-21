@@ -1,5 +1,5 @@
 import { getRedisClient } from '../../config/redis';
-import { logger } from '../../common/utils/logger';
+import { logger } from '../utils/logger';
 
 const DEFAULT_LOCK_TTL_MS = 10000; // 10 seconds
 
@@ -7,7 +7,7 @@ export class LockService {
   private readonly redis = getRedisClient();
 
   /**
-   * Acquire a Redis distributed lock using SET NX EX
+   * Acquire a Redis distributed lock using SET NX PX
    * Returns true if lock acquired, false if already held
    */
   async acquire(key: string, ttlMs = DEFAULT_LOCK_TTL_MS): Promise<boolean> {
@@ -15,17 +15,13 @@ export class LockService {
     return result === 'OK';
   }
 
-  /**
-   * Release a lock — only release if we own it
-   * (We don't store owner token here for simplicity; use with care)
-   */
   async release(key: string): Promise<void> {
     await this.redis.del(key);
   }
 
   /**
-   * Execute a function with a distributed lock
-   * Automatically releases lock on completion or error
+   * Execute a function while holding a distributed lock.
+   * Returns null (without running `fn`) if the lock could not be acquired.
    */
   async withLock<T>(
     key: string,
@@ -45,12 +41,22 @@ export class LockService {
     }
   }
 
-  allocationLockKey(bookingId: string): string {
-    return `lock:allocation:booking:${bookingId}`;
+  /**
+   * Serialises every attempt to put a barber on one booking, so two barbers
+   * claiming the same open booking (or a barber claiming while an admin
+   * assigns) cannot both win.
+   */
+  bookingAssignmentLockKey(bookingId: string): string {
+    return `lock:booking:${bookingId}:assign`;
   }
 
-  barberSlotLockKey(barberId: string, date: string, time: string): string {
-    return `lock:barber:${barberId}:slot:${date}:${time}`;
+  /**
+   * Serialises a single barber's calendar slot.
+   * `barberProfileId` MUST be the BarberProfile `_id` — the same id stored on
+   * `Assignment.barberId` — never the User id.
+   */
+  barberSlotLockKey(barberProfileId: string, date: string, time: string): string {
+    return `lock:barber:${barberProfileId}:slot:${date}:${time}`;
   }
 }
 

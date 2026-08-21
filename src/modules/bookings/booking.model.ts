@@ -1,4 +1,5 @@
 import mongoose, { Document, Schema } from 'mongoose';
+import { randomBytes } from 'crypto';
 import { BookingStatus } from '../../common/constants/bookingStates';
 import { BarberPreference } from '../../common/constants/roles';
 export { BookingStatus };
@@ -12,6 +13,10 @@ export interface IServiceSnapshot {
 
 export interface IAddressSnapshot {
   formattedAddress?: string;
+  houseNumber?: string;
+  landmark?: string;
+  postalCode?: string;
+  contactPhone?: string;
   city?: string;
   state?: string;
   country?: string;
@@ -40,11 +45,10 @@ export interface IBooking extends Document {
   cancellationReason?: string;
   cancelledBy?: mongoose.Types.ObjectId;
   cancelledAt?: Date;
-  excludedBarbers: mongoose.Types.ObjectId[];
-  allocationAttempts: number;
   // OTP verification fields
-  serviceOtp?: string;           // SHA-256 hashed OTP
-  serviceOtpRaw?: string;        // Plaintext OTP (shown to customer only)
+  serviceOtp?: string;           // SHA-256 hashed OTP (verified against)
+  serviceOtpRaw?: string;        // Retrievable copy — the customer's in-app card
+                                 // re-reads this on every poll. See README note.
   serviceOtpExpiresAt?: Date;    // OTP expiry (30 min from generation)
   serviceOtpVerifiedAt?: Date;   // When barber verified the OTP
   serviceOtpAttempts: number;    // Wrong-attempt counter (max 5)
@@ -119,8 +123,6 @@ const bookingSchema = new Schema<IBooking>(
     cancellationReason: { type: String },
     cancelledBy: { type: Schema.Types.ObjectId, ref: 'User' },
     cancelledAt: { type: Date },
-    excludedBarbers: [{ type: Schema.Types.ObjectId, ref: 'BarberProfile' }],
-    allocationAttempts: { type: Number, default: 0 },
     // OTP verification fields
     serviceOtp: { type: String },
     serviceOtpRaw: { type: String },
@@ -140,11 +142,13 @@ bookingSchema.index({ status: 1, scheduledStart: 1 });
 bookingSchema.index({ customerId: 1, status: 1 });
 bookingSchema.index({ customerLocation: '2dsphere' });
 
-// ─── Pre-save: generate booking number ────────────────────────────────────────
+// ─── Pre-validate: generate booking number ────────────────────────────────────
+// randomBytes rather than Math.random: bookingNumber carries a unique index, so
+// a collision surfaces as a raw E11000 on create rather than a friendly error.
 bookingSchema.pre('validate', function (this: IBooking, next) {
   if (!this.bookingNumber) {
     const ts = Date.now().toString(36).toUpperCase();
-    const rand = Math.random().toString(36).substring(2, 5).toUpperCase();
+    const rand = randomBytes(4).toString('hex').toUpperCase();
     this.bookingNumber = `BK-${ts}-${rand}`;
   }
   next();

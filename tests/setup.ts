@@ -24,7 +24,8 @@ afterEach(async () => {
   }
 });
 
-// Mock Redis to avoid needing a real Redis in unit tests
+// Mock Redis to avoid needing a real Redis in unit tests.
+// Still needed: distributed locks, rate limiting and idempotency all use it.
 vi.mock('../src/config/redis', () => ({
   getRedisClient: () => ({
     set: vi.fn().mockResolvedValue('OK'),
@@ -36,30 +37,15 @@ vi.mock('../src/config/redis', () => ({
     quit: vi.fn().mockResolvedValue('OK'),
     status: 'ready',
   }),
+  getRedisStatus: () => 'ready',
+  disconnectRedis: vi.fn().mockResolvedValue(undefined),
 }));
 
-// Mock BullMQ queues
-vi.mock('../src/queues/allocation.queue', () => ({
-  allocationQueue: {
-    add: vi.fn().mockResolvedValue({ id: 'mock-job-id' }),
+// Twilio is optional at runtime; stub it so tests never attempt a real send.
+vi.mock('../src/common/services/twilio.service', () => ({
+  twilioService: {
+    sendServiceOtpSms: vi.fn().mockResolvedValue(undefined),
+    sendServiceStartedSms: vi.fn().mockResolvedValue(undefined),
+    sendPasswordResetOtpSms: vi.fn().mockResolvedValue(undefined),
   },
-}));
-
-vi.mock('../src/queues/expiration.queue', () => ({
-  expirationQueue: {
-    add: vi.fn().mockResolvedValue({ id: 'mock-exp-job-id' }),
-  },
-}));
-
-vi.mock('../src/queues/notification.queue', () => ({
-  notificationQueue: {
-    add: vi.fn().mockResolvedValue({ id: 'mock-notif-job-id' }),
-  },
-}));
-
-// Mock socket server
-vi.mock('../src/sockets/socket.server', () => ({
-  emitToUser: vi.fn(),
-  initializeSocketServer: vi.fn(),
-  getSocketServer: vi.fn().mockReturnValue(null),
 }));

@@ -64,10 +64,13 @@ const options: swaggerJsdoc.Options = {
             bookingNumber: { type: 'string', example: 'BK-LZ2X9Y-ABC' },
             status: {
               type: 'string',
+              description:
+                'PENDING = waiting in the open pool. OFFERED = sent to a customer-chosen barber. ' +
+                'SEARCHING / NO_BARBER_AVAILABLE are legacy values from the removed auto-allocation engine.',
               enum: [
-                'PENDING', 'SEARCHING', 'OFFERED', 'CONFIRMED',
-                'IN_PROGRESS', 'COMPLETED', 'CUSTOMER_CANCELLED',
-                'BARBER_CANCELLED', 'EXPIRED', 'NO_BARBER_AVAILABLE', 'ADMIN_CANCELLED',
+                'PENDING', 'OFFERED', 'CONFIRMED', 'IN_PROGRESS', 'COMPLETED',
+                'CUSTOMER_CANCELLED', 'BARBER_CANCELLED', 'ADMIN_CANCELLED', 'EXPIRED',
+                'SEARCHING', 'NO_BARBER_AVAILABLE',
               ],
             },
             scheduledDate: { type: 'string', example: '2026-08-25' },

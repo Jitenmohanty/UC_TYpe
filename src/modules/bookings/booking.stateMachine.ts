@@ -2,22 +2,17 @@ import {
   BookingStatus,
   BOOKING_TRANSITIONS,
 } from '../../common/constants/bookingStates';
-import { BookingStateError } from '../../common/errors/AppError';
+import { BookingStateError, ConflictError } from '../../common/errors/AppError';
 import { bookingRepository } from './booking.repository';
+import { IBooking } from './booking.model';
 import { Types } from 'mongoose';
 import mongoose from 'mongoose';
 
 export class BookingStateMachine {
-  /**
-   * Validate that a status transition is allowed
-   */
   canTransition(from: BookingStatus, to: BookingStatus): boolean {
     return BOOKING_TRANSITIONS[from]?.has(to) ?? false;
   }
 
-  /**
-   * Assert the transition is valid, throw if not
-   */
   assertTransition(from: BookingStatus, to: BookingStatus): void {
     if (!this.canTransition(from, to)) {
       throw new BookingStateError(from, to);
@@ -25,7 +20,11 @@ export class BookingStateMachine {
   }
 
   /**
-   * Transition booking to a new status — validates and persists atomically
+   * Move a booking to `newStatus`.
+   *
+   * `currentStatus` is the status the caller observed. The write is conditional
+   * on the booking still being in that status, so a concurrent request that
+   * already moved it raises a ConflictError instead of being overwritten.
    */
   async transition(
     bookingId: Types.ObjectId | string,
@@ -37,11 +36,12 @@ export class BookingStateMachine {
       cancelledAt?: Date;
     },
     session?: mongoose.ClientSession,
-  ) {
+  ): Promise<IBooking> {
     this.assertTransition(currentStatus, newStatus);
 
-    const updated = await bookingRepository.updateStatus(
+    const updated = await bookingRepository.compareAndSetStatus(
       bookingId,
+      currentStatus,
       newStatus,
       extra
         ? {
@@ -52,6 +52,13 @@ export class BookingStateMachine {
         : undefined,
       session,
     );
+
+    if (!updated) {
+      throw new ConflictError(
+        `Booking is no longer ${currentStatus} — it was updated by someone else. Please refresh.`,
+        'BOOKING_STATE_CHANGED',
+      );
+    }
 
     return updated;
   }

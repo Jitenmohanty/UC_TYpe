@@ -6,10 +6,7 @@
   "scripts": {
     "build": "tsc --project tsconfig.json",
     "start": "node dist/server.js",
-    "start:api": "node dist/server.js",
-    "start:worker": "node dist/worker.js",
     "dev": "tsx watch src/server.ts",
-    "dev:worker": "tsx watch src/worker.ts",
     "lint": "eslint src --ext .ts",
     "lint:fix": "eslint src --ext .ts --fix",
     "format": "prettier --write \"src/**/*.ts\" \"tests/**/*.ts\" \"scripts/**/*.ts\"",
@@ -23,7 +20,6 @@
   },
   "dependencies": {
     "bcrypt": "^5.1.1",
-    "bullmq": "^5.7.0",
     "cors": "^2.8.5",
     "dotenv": "^16.6.1",
     "express": "^4.19.2",
@@ -37,7 +33,6 @@
     "pino-http": "^10.2.0",
     "pino-pretty": "^11.3.0",
     "rate-limit-redis": "^4.2.0",
-    "socket.io": "^4.7.5",
     "swagger-jsdoc": "^6.2.8",
     "swagger-ui-express": "^5.0.1",
     "twilio": "^6.1.0",

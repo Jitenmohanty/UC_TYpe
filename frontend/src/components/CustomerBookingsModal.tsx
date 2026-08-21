@@ -1,6 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import type { Booking } from '../types';
-import { bookingApi } from '../services/api';
+import { ACTIVE_STATUSES, CANCELLED_STATUSES } from '../types';
+import { bookingApi, apiErrorMessage } from '../services/api';
 import {
   X,
   Calendar,
@@ -34,10 +35,11 @@ export const CustomerBookingsModal: React.FC<CustomerBookingsModalProps> = ({
   const fetchBookings = async () => {
     setLoading(true);
     try {
-      const data = await bookingApi.getMyBookings();
-      setBookings(Array.isArray(data) ? data : (data as any)?.items || []);
-    } catch {
-      // Fallback
+      // bookingApi.getMyBookings already normalises the paginated envelope to an array.
+      setBookings(await bookingApi.getMyBookings());
+    } catch (err) {
+      setStatusMessage(apiErrorMessage(err, 'Could not load your bookings.'));
+      setTimeout(() => setStatusMessage(null), 4000);
     } finally {
       setLoading(false);
     }
@@ -58,9 +60,8 @@ export const CustomerBookingsModal: React.FC<CustomerBookingsModalProps> = ({
       await bookingApi.cancel(bookingId, 'Customer requested cancellation from portal');
       setStatusMessage('Booking cancelled successfully.');
       await fetchBookings();
-    } catch (err: any) {
-      const msg = err?.response?.data?.error?.message || 'Failed to cancel booking';
-      setStatusMessage(msg);
+    } catch (err) {
+      setStatusMessage(apiErrorMessage(err, 'Failed to cancel booking'));
     } finally {
       setCancellingId(null);
       setTimeout(() => setStatusMessage(null), 3500);
@@ -69,15 +70,9 @@ export const CustomerBookingsModal: React.FC<CustomerBookingsModalProps> = ({
 
   const filteredBookings = bookings.filter((b) => {
     if (activeTab === 'all') return true;
-    if (activeTab === 'active') {
-      return ['PENDING', 'SEARCHING', 'OFFERED', 'CONFIRMED', 'ASSIGNED', 'ACCEPTED', 'EN_ROUTE', 'ARRIVED', 'IN_PROGRESS'].includes(b.status);
-    }
-    if (activeTab === 'completed') {
-      return b.status === 'COMPLETED';
-    }
-    if (activeTab === 'cancelled') {
-      return ['CUSTOMER_CANCELLED', 'BARBER_CANCELLED', 'EXPIRED', 'NO_BARBER_AVAILABLE', 'ADMIN_CANCELLED', 'SYSTEM_CANCELLED'].includes(b.status);
-    }
+    if (activeTab === 'active') return ACTIVE_STATUSES.includes(b.status);
+    if (activeTab === 'completed') return b.status === 'COMPLETED';
+    if (activeTab === 'cancelled') return CANCELLED_STATUSES.includes(b.status);
     return true;
   });
 
@@ -86,21 +81,19 @@ export const CustomerBookingsModal: React.FC<CustomerBookingsModalProps> = ({
       case 'COMPLETED':
         return 'bg-emerald-500/20 text-emerald-300 border-emerald-500/40';
       case 'CONFIRMED':
-      case 'ACCEPTED':
       case 'IN_PROGRESS':
         return 'bg-purple-500/20 text-purple-300 border-purple-500/40 animate-pulse';
-      case 'SEARCHING':
       case 'OFFERED':
       case 'PENDING':
+      case 'SEARCHING':
         return 'bg-amber-500/20 text-amber-300 border-amber-500/40';
       default:
         return 'bg-red-500/20 text-red-300 border-red-500/40';
     }
   };
 
-  const isCancellable = (status: string) => {
-    return ['PENDING', 'SEARCHING', 'OFFERED', 'CONFIRMED', 'ACCEPTED'].includes(status);
-  };
+  const isCancellable = (status: string) =>
+    ['PENDING', 'OFFERED', 'CONFIRMED', 'SEARCHING', 'BARBER_CANCELLED', 'NO_BARBER_AVAILABLE'].includes(status);
 
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/85 backdrop-blur-xl animate-fade-in">
@@ -149,11 +142,7 @@ export const CustomerBookingsModal: React.FC<CustomerBookingsModalProps> = ({
             { id: 'all', label: `All (${bookings.length})` },
             {
               id: 'active',
-              label: `Active & In-Progress (${
-                bookings.filter((b) =>
-                  ['PENDING', 'SEARCHING', 'OFFERED', 'CONFIRMED', 'ASSIGNED', 'ACCEPTED', 'EN_ROUTE', 'ARRIVED', 'IN_PROGRESS'].includes(b.status)
-                ).length
-              })`,
+              label: `Active (${bookings.filter((b) => ACTIVE_STATUSES.includes(b.status)).length})`,
             },
             {
               id: 'completed',
@@ -161,11 +150,7 @@ export const CustomerBookingsModal: React.FC<CustomerBookingsModalProps> = ({
             },
             {
               id: 'cancelled',
-              label: `Cancelled (${
-                bookings.filter((b) =>
-                  ['CUSTOMER_CANCELLED', 'BARBER_CANCELLED', 'EXPIRED', 'NO_BARBER_AVAILABLE', 'ADMIN_CANCELLED', 'SYSTEM_CANCELLED'].includes(b.status)
-                ).length
-              })`,
+              label: `Cancelled (${bookings.filter((b) => CANCELLED_STATUSES.includes(b.status)).length})`,
             },
           ].map((tab) => (
             <button
@@ -284,22 +269,22 @@ export const CustomerBookingsModal: React.FC<CustomerBookingsModalProps> = ({
 
                     {b.status === 'BARBER_CANCELLED' && (
                       <span className="text-amber-400 text-xs font-semibold flex items-center gap-1.5">
-                        <RefreshCw className="w-3.5 h-3.5 animate-spin" />
-                        Previous barber unavailable • Finding new partner nearby...
+                        <Clock className="w-3.5 h-3.5" />
+                        Barber unavailable • back in the queue for another barber
                       </span>
                     )}
 
-                    {['PENDING', 'SEARCHING'].includes(b.status) && (
-                      <span className="text-purple-300 text-xs font-semibold flex items-center gap-1.5">
-                        <RefreshCw className="w-3.5 h-3.5 animate-spin" />
-                        Matching best doorstep barber...
+                    {['PENDING', 'SEARCHING', 'NO_BARBER_AVAILABLE'].includes(b.status) && (
+                      <span className="text-amber-300 text-xs font-semibold flex items-center gap-1.5">
+                        <Clock className="w-3.5 h-3.5" />
+                        Waiting for a barber to be assigned
                       </span>
                     )}
 
-                    {b.status === 'NO_BARBER_AVAILABLE' && (
-                      <span className="text-gray-400 text-xs font-semibold flex items-center gap-1.5">
-                        <Ban className="w-3.5 h-3.5" />
-                        No nearby partner available currently
+                    {b.status === 'OFFERED' && (
+                      <span className="text-amber-300 text-xs font-semibold flex items-center gap-1.5">
+                        <Clock className="w-3.5 h-3.5" />
+                        Sent to your chosen barber — awaiting their confirmation
                       </span>
                     )}
 

@@ -13,6 +13,7 @@ import { CustomerBookingsModal } from './components/CustomerBookingsModal';
 import { BarberDashboard } from './components/BarberDashboard';
 import { AdminDashboard } from './components/AdminDashboard';
 import { AuthModal } from './components/AuthModal';
+import { ServicesListModal } from './components/ServicesListModal';
 import type { User, ServiceItem, BarberProfile, Booking } from './types';
 import { authApi, servicesApi, bookingApi } from './services/api';
 import { Sparkles, Calendar, KeyRound, Copy, CheckCircle2, Clock, ShieldCheck, RefreshCw } from 'lucide-react';
@@ -27,6 +28,7 @@ export function App() {
   const [authPromptMessage, setAuthPromptMessage] = useState<string | null>(null);
   const [isBookingOpen, setIsBookingOpen] = useState(false);
   const [isHistoryOpen, setIsHistoryOpen] = useState(false);
+  const [isServicesListOpen, setIsServicesListOpen] = useState(false);
   const [selectedService, setSelectedService] = useState<ServiceItem | null>(null);
   const [selectedBarber, setSelectedBarber] = useState<BarberProfile | null>(null);
   const [toastMessage, setToastMessage] = useState<string | null>(null);
@@ -206,6 +208,7 @@ export function App() {
           setIsBookingOpen(true);
         }}
         onOpenMyBookings={() => setIsHistoryOpen(true)}
+        onOpenServices={() => setIsServicesListOpen(true)}
         onLogout={handleLogout}
         activeView={activeView}
         setActiveView={setActiveView}
@@ -366,6 +369,7 @@ export function App() {
                 setSelectedBarber(null);
                 setIsBookingOpen(true);
               }}
+              onOpenServices={() => setIsServicesListOpen(true)}
             />
 
             {/* 2. Wispr Flow Bento Features Grid */}
@@ -467,6 +471,31 @@ export function App() {
         }}
         onSuccess={handleAuthSuccess}
         initialMessage={authPromptMessage}
+      />
+
+      <ServicesListModal
+        isOpen={isServicesListOpen}
+        onClose={() => setIsServicesListOpen(false)}
+        services={services}
+        onSelectService={(service) => {
+          if (!user) {
+            setAuthPromptMessage(`Please sign in to book ${service.name}.`);
+            setIsAuthOpen(true);
+            return;
+          }
+          setSelectedService(service);
+          setSelectedBarber(null);
+          setIsBookingOpen(true);
+        }}
+        onNavigateToCatalogSection={() => {
+          setActiveView('customer');
+          setTimeout(() => {
+            const el = document.getElementById('services');
+            if (el) {
+              el.scrollIntoView({ behavior: 'smooth' });
+            }
+          }, 60);
+        }}
       />
 
       {/* Luxury Footer */}

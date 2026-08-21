@@ -1,6 +1,11 @@
 import { Types } from 'mongoose';
 import { BookingModel, IBooking } from './booking.model';
-import { BookingStatus } from '../../common/constants/bookingStates';
+import { AssignmentModel } from '../assignments/assignment.model';
+import { ACTIVE_ASSIGNMENT_STATUSES } from '../../common/constants/assignmentStates';
+import {
+  BookingStatus,
+  UNASSIGNED_BOOKING_STATUSES,
+} from '../../common/constants/bookingStates';
 import { buildPaginatedResult, getSkip } from '../../common/utils/pagination';
 import { PaginationQuery } from '../../common/types/global';
 import mongoose from 'mongoose';
@@ -26,6 +31,11 @@ export class BookingRepository {
     return BookingModel.findById(id).lean().exec() as Promise<IBooking | null>;
   }
 
+  /**
+   * Unconditional status write. Prefer `compareAndSetStatus` (via the state
+   * machine) for lifecycle changes; this is for side-channel field updates
+   * that keep the status where it already is.
+   */
   async updateStatus(
     bookingId: Types.ObjectId | string,
     status: BookingStatus,
@@ -35,40 +45,45 @@ export class BookingRepository {
     return BookingModel.findByIdAndUpdate(
       bookingId,
       { $set: { status, ...extra } },
-      { new: true, session },
+      { new: true, session, runValidators: true },
     ).exec();
   }
 
-  async addExcludedBarber(
+  /** Update fields without touching status. */
+  async updateFields(
     bookingId: Types.ObjectId | string,
-    barberId: Types.ObjectId,
+    fields: Partial<IBooking>,
     session?: mongoose.ClientSession,
-  ): Promise<void> {
-    await BookingModel.findByIdAndUpdate(
+  ): Promise<IBooking | null> {
+    return BookingModel.findByIdAndUpdate(
       bookingId,
-      { $addToSet: { excludedBarbers: barberId } },
-      { session },
+      { $set: fields },
+      { new: true, session, runValidators: true },
     ).exec();
   }
 
-  async incrementAllocationAttempts(
+  /**
+   * Compare-and-set the status: only writes if the booking is still in
+   * `fromStatus`. Returns null when someone else already moved it.
+   */
+  async compareAndSetStatus(
     bookingId: Types.ObjectId | string,
+    fromStatus: BookingStatus,
+    toStatus: BookingStatus,
+    extra?: Partial<IBooking>,
     session?: mongoose.ClientSession,
-  ): Promise<void> {
-    await BookingModel.findByIdAndUpdate(
-      bookingId,
-      { $inc: { allocationAttempts: 1 } },
-      { session },
+  ): Promise<IBooking | null> {
+    return BookingModel.findOneAndUpdate(
+      { _id: bookingId, status: fromStatus },
+      { $set: { status: toStatus, ...extra } },
+      { new: true, session, runValidators: true },
     ).exec();
   }
 
-  async incrementOtpAttempts(
-    bookingId: Types.ObjectId | string,
-  ): Promise<void> {
-    await BookingModel.findByIdAndUpdate(
-      bookingId,
-      { $inc: { serviceOtpAttempts: 1 } },
-    ).exec();
+  async incrementOtpAttempts(bookingId: Types.ObjectId | string): Promise<void> {
+    await BookingModel.findByIdAndUpdate(bookingId, {
+      $inc: { serviceOtpAttempts: 1 },
+    }).exec();
   }
 
   async findByCustomer(
@@ -95,18 +110,36 @@ export class BookingRepository {
     return buildPaginatedResult(data, total, page, limit);
   }
 
-  async findByStatus(statuses: BookingStatus[], pagination: PaginationQuery) {
+  /**
+   * The open pool: bookings still waiting for a barber.
+   *
+   * Excludes anything that already has an active assignment, so a booking a
+   * barber has taken (or an admin has assigned) disappears from every other
+   * barber's pool immediately.
+   */
+  async findOpenPool(pagination: PaginationQuery) {
     const { page = 1, limit = 20 } = pagination;
     const skip = getSkip(page, limit);
 
-    const query = { status: { $in: statuses } };
+    const claimed = await AssignmentModel.find({
+      status: { $in: Array.from(ACTIVE_ASSIGNMENT_STATUSES) },
+    })
+      .select('bookingId')
+      .lean()
+      .exec();
+
+    const query = {
+      status: { $in: Array.from(UNASSIGNED_BOOKING_STATUSES) },
+      _id: { $nin: claimed.map((a) => a.bookingId) },
+    };
+
     const [data, total] = await Promise.all([
       BookingModel.find(query)
-        .sort({ createdAt: -1 })
+        .sort({ scheduledStart: 1, createdAt: -1 })
         .skip(skip)
         .limit(limit)
         .populate('customerId', 'name email phone')
-        .populate('serviceId', 'name price')
+        .populate('serviceId', 'name price durationMinutes')
         .exec(),
       BookingModel.countDocuments(query).exec(),
     ]);
@@ -130,6 +163,28 @@ export class BookingRepository {
     ]);
 
     return buildPaginatedResult(data, total, page, limit);
+  }
+
+  /** Status counts across all bookings — powers the admin dashboard tiles. */
+  async countByStatus(): Promise<Record<string, number>> {
+    const rows = await BookingModel.aggregate<{ _id: string; count: number }>([
+      { $group: { _id: '$status', count: { $sum: 1 } } },
+    ]).exec();
+
+    return rows.reduce<Record<string, number>>((acc, row) => {
+      acc[row._id] = row.count;
+      return acc;
+    }, {});
+  }
+
+  /** Sum of serviceSnapshot.price over completed bookings. */
+  async sumCompletedRevenue(): Promise<number> {
+    const [row] = await BookingModel.aggregate<{ total: number }>([
+      { $match: { status: BookingStatus.COMPLETED } },
+      { $group: { _id: null, total: { $sum: '$serviceSnapshot.price' } } },
+    ]).exec();
+
+    return row?.total ?? 0;
   }
 }
 

@@ -1,7 +1,14 @@
 import axios from 'axios';
-import type { BarberProfile, ServiceItem, Booking, Assignment } from '../types';
+import type {
+  AdminStats,
+  Assignment,
+  BarberProfile,
+  Booking,
+  Paginated,
+  ServiceItem,
+} from '../types';
 
-const API_BASE_URL = import.meta.env.VITE_API_URL || 'http://localhost:5000/api/v1';
+const API_BASE_URL = import.meta.env.VITE_API_URL || 'http://localhost:3000/api/v1';
 
 export const api = axios.create({
   baseURL: API_BASE_URL,
@@ -10,7 +17,7 @@ export const api = axios.create({
   },
 });
 
-// Intercept requests to add Authorization header
+// Attach the bearer token to every request
 api.interceptors.request.use((config) => {
   const token = localStorage.getItem('accessToken');
   if (token) {
@@ -19,26 +26,47 @@ api.interceptors.request.use((config) => {
   return config;
 });
 
-// Intercept responses to handle 401 / expired token and trigger login automatically
+// Force re-auth on 401 (expired/invalid token) — but not on 403 (role denied)
 api.interceptors.response.use(
   (response) => response,
   (error) => {
     const status = error?.response?.status;
-    // Only force re-auth on 401 (token expired/invalid), NOT on 403 (role forbidden)
     if (status === 401) {
-      const url = error?.config?.url || '';
-      if (!url.includes('/auth/login') && !url.includes('/auth/register') && !url.includes('/auth/forgot-password') && !url.includes('/auth/verify-reset-otp') && !url.includes('/auth/reset-password')) {
+      const url: string = error?.config?.url || '';
+      const isAuthFlow = [
+        '/auth/login',
+        '/auth/register',
+        '/auth/forgot-password',
+        '/auth/verify-reset-otp',
+        '/auth/reset-password',
+      ].some((path) => url.includes(path));
+
+      if (!isAuthFlow) {
         localStorage.removeItem('accessToken');
-        window.dispatchEvent(new CustomEvent('auth:required', {
-          detail: { message: 'Your session has expired. Please sign in again.' }
-        }));
+        window.dispatchEvent(
+          new CustomEvent('auth:required', {
+            detail: { message: 'Your session has expired. Please sign in again.' },
+          }),
+        );
       }
     }
     return Promise.reject(error);
-  }
+  },
 );
 
-// Auth API
+/** Pull a human-readable message out of an axios error. */
+export const apiErrorMessage = (err: unknown, fallback: string): string => {
+  const e = err as { response?: { data?: { error?: { message?: string }; message?: string } } };
+  return e?.response?.data?.error?.message || e?.response?.data?.message || fallback;
+};
+
+/** Every list endpoint returns `{ data, total, ... }`. Normalise to an array. */
+const rows = <T>(payload: Paginated<T> | T[] | null | undefined): T[] => {
+  if (Array.isArray(payload)) return payload;
+  return payload?.data ?? [];
+};
+
+// ─── Auth ─────────────────────────────────────────────────────────────────────
 export const authApi = {
   register: async (payload: {
     name: string;
@@ -59,15 +87,23 @@ export const authApi = {
     const res = await api.get('/auth/me');
     return res.data.data;
   },
-  forgotPassword: async (identifier: string): Promise<{ message: string; identifier?: string; expiresAt?: string }> => {
+  forgotPassword: async (
+    identifier: string,
+  ): Promise<{ message: string; identifier?: string; expiresAt?: string }> => {
     const res = await api.post('/auth/forgot-password', { identifier });
     return res.data.data;
   },
-  verifyResetOtp: async (identifier: string, otp: string): Promise<{ message: string; resetToken: string }> => {
+  verifyResetOtp: async (
+    identifier: string,
+    otp: string,
+  ): Promise<{ message: string; resetToken: string }> => {
     const res = await api.post('/auth/verify-reset-otp', { identifier, otp });
     return res.data.data;
   },
-  resetPassword: async (resetToken: string, newPassword: string): Promise<{ message: string }> => {
+  resetPassword: async (
+    resetToken: string,
+    newPassword: string,
+  ): Promise<{ message: string }> => {
     const res = await api.post('/auth/reset-password', { resetToken, newPassword });
     return res.data.data;
   },
@@ -77,15 +113,15 @@ export const authApi = {
   },
 };
 
-// Service Catalog API
+// ─── Service catalog ──────────────────────────────────────────────────────────
 export const servicesApi = {
   getAll: async (): Promise<ServiceItem[]> => {
     const res = await api.get('/services');
-    return res.data.data;
+    return rows<ServiceItem>(res.data.data);
   },
 };
 
-// Customer API
+// ─── Customer ─────────────────────────────────────────────────────────────────
 export const customersApi = {
   getProfile: async () => {
     const res = await api.get('/customers/me');
@@ -100,34 +136,66 @@ export const customersApi = {
     return res.data.data;
   },
 };
+
+// ─── Barber ───────────────────────────────────────────────────────────────────
 export const barbersApi = {
-  getNearby: async (params: { latitude: number; longitude: number; radiusKm?: number }): Promise<BarberProfile[]> => {
+  getNearby: async (params: {
+    latitude: number;
+    longitude: number;
+    radiusKm?: number;
+    serviceId?: string;
+    date?: string;
+    startTime?: string;
+  }): Promise<BarberProfile[]> => {
     const res = await api.get('/barbers/nearby', { params });
-    return res.data.data;
+    return rows<BarberProfile>(res.data.data);
   },
+
   getMe: async (): Promise<BarberProfile> => {
     const res = await api.get('/barbers/me');
     return res.data.data;
   },
+
   updateLocation: async (latitude: number, longitude: number): Promise<BarberProfile> => {
     const res = await api.patch('/barbers/me/location', { latitude, longitude });
     return res.data.data;
   },
-  toggleAutoAllocation: async (enabled: boolean): Promise<BarberProfile> => {
+
+  /** Availability switch — whether customers are shown this barber. */
+  setAcceptingBookings: async (enabled: boolean): Promise<BarberProfile> => {
     const res = await api.patch('/barbers/me/auto-allocation', { enabled });
     return res.data.data;
   },
-  getMyBookings: async (params?: { page?: number; limit?: number }) => {
+
+  /** The barber's one live job (offer or in flight), or null. */
+  getActiveAssignment: async (): Promise<Assignment | null> => {
+    const res = await api.get('/barbers/me/active-assignment');
+    return res.data.data ?? null;
+  },
+
+  /** Job history for this barber. */
+  getMyJobs: async (params?: { page?: number; limit?: number }): Promise<Assignment[]> => {
     const res = await api.get('/barbers/me/bookings', { params });
+    return rows<Assignment>(res.data.data);
+  },
+
+  /** Bookings still waiting for a barber. */
+  getOpenBookings: async (params?: {
+    page?: number;
+    limit?: number;
+  }): Promise<Paginated<Booking>> => {
+    const res = await api.get('/barbers/pool/open-bookings', { params });
     return res.data.data;
   },
-  getOpenBookings: async (params?: { page?: number; limit?: number }) => {
-    const res = await api.get('/barbers/pool/open-bookings', { params });
+
+  /** Take an open booking for yourself. */
+  claimBooking: async (bookingId: string): Promise<Assignment> => {
+    const res = await api.post(`/barbers/pool/open-bookings/${bookingId}/claim`);
     return res.data.data;
   },
 };
 
-// Booking API
+// ─── Booking (customer) ───────────────────────────────────────────────────────
 export const bookingApi = {
   create: async (payload: {
     serviceId: string;
@@ -139,6 +207,10 @@ export const bookingApi = {
     customerLocation: { latitude: number; longitude: number };
     addressSnapshot?: {
       formattedAddress?: string;
+      houseNumber?: string;
+      landmark?: string;
+      postalCode?: string;
+      contactPhone?: string;
       city?: string;
       state?: string;
       country?: string;
@@ -147,37 +219,51 @@ export const bookingApi = {
     const res = await api.post('/bookings', payload);
     return res.data.data;
   },
+
   getMyBookings: async (): Promise<Booking[]> => {
     const res = await api.get('/bookings');
-    return res.data.data;
+    return rows<Booking>(res.data.data);
   },
+
   getById: async (bookingId: string) => {
     const res = await api.get(`/bookings/${bookingId}`);
     return res.data.data;
   },
+
   cancel: async (bookingId: string, reason: string): Promise<Booking> => {
     const res = await api.post(`/bookings/${bookingId}/cancel`, { reason });
     return res.data.data;
   },
-  getOtp: async (bookingId: string): Promise<{ otp: string; expiresAt: string; bookingId: string }> => {
+
+  getOtp: async (
+    bookingId: string,
+  ): Promise<{ otp: string; expiresAt: string; bookingId: string }> => {
     const res = await api.get(`/bookings/${bookingId}/otp`);
     return res.data.data;
   },
-  resendOtp: async (bookingId: string): Promise<{ message: string; otp: string; expiresAt: string; bookingId: string }> => {
+
+  resendOtp: async (
+    bookingId: string,
+  ): Promise<{ message: string; otp: string; expiresAt: string; bookingId: string }> => {
     const res = await api.post(`/bookings/${bookingId}/resend-otp`);
     return res.data.data;
   },
-  verifyOtp: async (bookingId: string, otp: string): Promise<{ message: string; bookingId: string; status: string }> => {
+
+  /** Barber submits the customer's code to start the service. */
+  verifyOtp: async (
+    bookingId: string,
+    otp: string,
+  ): Promise<{ message: string; bookingId: string; status: string }> => {
     const res = await api.post(`/bookings/${bookingId}/verify-otp`, { otp });
     return res.data.data;
   },
 };
 
-// Assignment API (for Barber Portal)
+// ─── Assignment lifecycle (barber) ────────────────────────────────────────────
 export const assignmentApi = {
-  getPending: async (): Promise<Assignment | null> => {
+  getActive: async (): Promise<Assignment | null> => {
     const res = await api.get('/assignments/pending');
-    return res.data.data;
+    return res.data.data ?? null;
   },
   accept: async (assignmentId: string): Promise<Assignment> => {
     const res = await api.post(`/assignments/${assignmentId}/accept`);
@@ -187,19 +273,19 @@ export const assignmentApi = {
     const res = await api.post(`/assignments/${assignmentId}/reject`, { reason });
     return res.data.data;
   },
-  startJourney: async (assignmentId: string): Promise<Assignment> => {
+  startJourney: async (
+    assignmentId: string,
+  ): Promise<{ message: string; bookingId: string; status: string }> => {
     const res = await api.post(`/assignments/${assignmentId}/start-journey`);
     return res.data.data;
   },
-  arrive: async (assignmentId: string): Promise<Assignment> => {
+  arrive: async (
+    assignmentId: string,
+  ): Promise<{ message: string; bookingId: string; status: string; otpExpiresAt: string }> => {
     const res = await api.post(`/assignments/${assignmentId}/arrive`);
     return res.data.data;
   },
-  startService: async (assignmentId: string): Promise<Assignment> => {
-    const res = await api.post(`/assignments/${assignmentId}/start-service`);
-    return res.data.data;
-  },
-  complete: async (assignmentId: string): Promise<Assignment> => {
+  complete: async (assignmentId: string): Promise<{ message: string; bookingId: string }> => {
     const res = await api.post(`/assignments/${assignmentId}/complete`);
     return res.data.data;
   },
@@ -209,34 +295,40 @@ export const assignmentApi = {
   },
 };
 
-// Admin API
+// ─── Admin ────────────────────────────────────────────────────────────────────
 export const adminApi = {
-  getBookings: async (params?: { page?: number; limit?: number; status?: string }) => {
+  getStats: async (): Promise<AdminStats> => {
+    const res = await api.get('/admin/stats');
+    return res.data.data;
+  },
+  getBookings: async (params?: {
+    page?: number;
+    limit?: number;
+    status?: string;
+  }): Promise<Paginated<Booking>> => {
     const res = await api.get('/admin/bookings', { params });
     return res.data.data;
   },
-  getBarbers: async (params?: { page?: number; limit?: number }) => {
+  getBarbers: async (params?: {
+    page?: number;
+    limit?: number;
+  }): Promise<Paginated<BarberProfile>> => {
     const res = await api.get('/admin/barbers', { params });
     return res.data.data;
   },
-  updateBarberStatus: async (barberId: string, status: 'ACTIVE' | 'INACTIVE' | 'SUSPENDED') => {
+  updateBarberStatus: async (
+    barberId: string,
+    status: 'ACTIVE' | 'INACTIVE' | 'SUSPENDED',
+  ): Promise<BarberProfile> => {
     const res = await api.patch(`/admin/barbers/${barberId}/status`, { status });
     return res.data.data;
   },
-  manualAssign: async (bookingId: string, barberId: string) => {
+  assignBarber: async (bookingId: string, barberId: string): Promise<{ assignment: Assignment }> => {
     const res = await api.post(`/admin/bookings/${bookingId}/assign`, { barberId });
-    return res.data.data;
-  },
-  reallocate: async (bookingId: string) => {
-    const res = await api.post(`/admin/bookings/${bookingId}/reallocate`);
     return res.data.data;
   },
   cancelBooking: async (bookingId: string, reason?: string) => {
     const res = await api.post(`/admin/bookings/${bookingId}/cancel`, { reason });
-    return res.data.data;
-  },
-  getAllocationFailures: async (params?: { page?: number; limit?: number }) => {
-    const res = await api.get('/admin/allocation-failures', { params });
     return res.data.data;
   },
   getAuditLogs: async (params?: { page?: number; limit?: number }) => {

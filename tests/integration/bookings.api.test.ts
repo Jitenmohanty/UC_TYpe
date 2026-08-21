@@ -50,7 +50,8 @@ describe('Bookings API Integration Tests', () => {
 
     expect(res.status).toBe(201);
     expect(res.body.success).toBe(true);
-    expect(res.body.data.status).toBe(BookingStatus.SEARCHING);
+    // No auto-dispatch: a booking with no preferred barber lands in the open pool.
+    expect(res.body.data.status).toBe(BookingStatus.PENDING);
   });
 
   it('GET /api/v1/bookings - Should list customer bookings', async () => {
@@ -88,7 +89,7 @@ describe('Bookings API Integration Tests', () => {
       scheduledEnd: new Date('2026-10-15T15:30:00Z'),
       durationMinutes: 30,
       totalPrice: 30.0,
-      status: BookingStatus.SEARCHING,
+      status: BookingStatus.PENDING,
       customerLocation: { type: 'Point', coordinates: [-74.006, 40.7128] },
     });
 
@@ -139,7 +140,7 @@ describe('Bookings API Integration Tests', () => {
       scheduledEnd: new Date('2026-10-15T17:00:00Z'),
       durationMinutes: 60,
       totalPrice: 80.0,
-      status: BookingStatus.SEARCHING,
+      status: BookingStatus.PENDING,
       customerLocation: { type: 'Point', coordinates: [-74.006, 40.7128] },
     });
 

@@ -3,7 +3,6 @@ import http from 'http';
 import { createApp } from './app';
 import { connectDatabase, disconnectDatabase } from './config/database';
 import { getRedisClient, disconnectRedis } from './config/redis';
-import { initializeSocketServer } from './sockets/socket.server';
 import { env } from './config/env';
 import { logger } from './common/utils/logger';
 
@@ -12,13 +11,10 @@ async function bootstrap(): Promise<void> {
 
   // Connect to databases
   await connectDatabase();
-  getRedisClient(); // Initialize Redis connection
+  getRedisClient(); // Initialize Redis connection (locks, rate limits, idempotency)
 
   const app = createApp();
   const httpServer = http.createServer(app);
-
-  // Initialize Socket.IO
-  initializeSocketServer(httpServer);
 
   // Start listening
   httpServer.listen(env.PORT, () => {

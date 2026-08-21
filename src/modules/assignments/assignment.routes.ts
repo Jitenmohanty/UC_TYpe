@@ -15,10 +15,9 @@ const assignmentIdSchema = z.object({
   assignmentId: z.string().regex(/^[0-9a-fA-F]{24}$/, 'Invalid assignment ID'),
 });
 
-assignmentRoutes.get(
-  '/pending',
-  assignmentController.getPendingAssignment,
-);
+/** The barber's current live job (offered or in flight), or null. */
+assignmentRoutes.get('/pending', assignmentController.getActiveAssignment);
+assignmentRoutes.get('/active', assignmentController.getActiveAssignment);
 
 assignmentRoutes.post(
   '/:assignmentId/accept',
@@ -42,34 +41,22 @@ assignmentRoutes.post(
 );
 
 assignmentRoutes.post(
-  '/:assignmentId/cancel',
-  validate({
-    params: assignmentIdSchema,
-    body: z.object({ reason: z.string().min(1).max(500) }),
-  }),
-  assignmentController.cancelAssignment,
-);
-
-assignmentRoutes.post(
   '/:assignmentId/arrive',
   validate({ params: assignmentIdSchema }),
   assignmentController.arriveAssignment,
 );
 
 assignmentRoutes.post(
-  '/:assignmentId/start',
-  validate({ params: assignmentIdSchema }),
-  assignmentController.startAssignment,
-);
-
-assignmentRoutes.post(
-  '/:assignmentId/start-service',
-  validate({ params: assignmentIdSchema }),
-  assignmentController.startAssignment,
-);
-
-assignmentRoutes.post(
   '/:assignmentId/complete',
   validate({ params: assignmentIdSchema }),
   assignmentController.completeAssignment,
+);
+
+assignmentRoutes.post(
+  '/:assignmentId/cancel',
+  validate({
+    params: assignmentIdSchema,
+    body: z.object({ reason: z.string().min(1).max(500) }),
+  }),
+  assignmentController.cancelAssignment,
 );

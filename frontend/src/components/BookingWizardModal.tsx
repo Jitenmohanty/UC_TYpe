@@ -25,8 +25,6 @@ export const BookingWizardModal: React.FC<BookingWizardModalProps> = ({
   services,
   onBookingCreated,
 }) => {
-  if (!isOpen) return null;
-
   const [step, setStep] = useState<1 | 2 | 3>(1);
 
   // Live real-time coordinates
@@ -107,21 +105,26 @@ export const BookingWizardModal: React.FC<BookingWizardModalProps> = ({
     }
   };
 
-  // Automatically fetch live GPS coordinates when opening the modal or stepping to location
+  // Fetch live GPS when the modal opens. Guarded on isOpen so a closed modal
+  // never prompts for location permission on page load.
   useEffect(() => {
+    if (!isOpen) return;
     void requestLiveLocation();
   }, [isOpen]);
 
   useEffect(() => {
+    if (!isOpen) return;
     if (step === 3 && !locationDetected) {
       void requestLiveLocation();
     } else if (step === 3 && latitude && longitude && !formattedAddress) {
       void resolveAddressFromCoords(latitude, longitude);
     }
-  }, [step, latitude, longitude]);
+  }, [isOpen, step, latitude, longitude]);
 
   // Initialize service & barber state on open/props change
   useEffect(() => {
+    if (!isOpen) return;
+
     // Pick valid service
     const validService = selectedService && isValidMongoId(selectedService._id)
       ? selectedService._id
@@ -142,12 +145,15 @@ export const BookingWizardModal: React.FC<BookingWizardModalProps> = ({
       .then((list) => {
         const validList = list.filter((b) => isValidMongoId(b._id));
         setAvailableBarbers(validList);
-        if (validList.length > 0 && !selectedBarber) {
-          setPreferredBarberId(validList[0]!._id);
-        }
       })
       .catch(() => {});
   }, [isOpen, selectedService, selectedBarber, services, latitude, longitude]);
+
+  // Every hook must run on every render, so this early return has to sit BELOW
+  // them all. It previously sat at the top of the component, which meant the
+  // hook count jumped 0 → 15 the moment the modal opened and React threw
+  // "Rendered more hooks than during the previous render".
+  if (!isOpen) return null;
 
   const handleBookingSubmit = async () => {
     setLoading(true);
@@ -167,10 +173,19 @@ export const BookingWizardModal: React.FC<BookingWizardModalProps> = ({
       // Fallback to currently selected coordinates
     }
 
-    // Validate serviceId
+    // Validate serviceId — never fall back to a hardcoded id, which produced
+    // confusing "Service not found" errors from the API.
     const finalServiceId = isValidMongoId(serviceId)
       ? serviceId
-      : services.find((s) => isValidMongoId(s._id))?._id || '6a8481e6197f75be106a931e';
+      : services.find((s) => isValidMongoId(s._id))?._id;
+
+    if (!finalServiceId) {
+      setSearching(false);
+      setLoading(false);
+      setError('Please pick a service before confirming.');
+      setStep(1);
+      return;
+    }
 
     // Validate preferredBarberId
     const validBarberId = isValidMongoId(preferredBarberId) ? preferredBarberId : undefined;

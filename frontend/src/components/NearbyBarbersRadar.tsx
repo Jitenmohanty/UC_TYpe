@@ -13,102 +13,38 @@ export const NearbyBarbersRadar: React.FC<NearbyBarbersRadarProps> = ({ onSelect
   const [radiusKm, setRadiusKm] = useState(10);
   const [coords, setCoords] = useState<{ latitude: number; longitude: number }>(getCachedCoordinates());
   const [locationLoading, setLocationLoading] = useState(false);
+  const [loading, setLoading] = useState(true);
 
-  const defaultBarbers: BarberProfile[] = [
-    {
-      _id: 'b-1',
-      userId: 'u-1',
-      experienceYears: 7,
-      rating: 4.95,
-      totalReviews: 142,
-      totalCompletedJobs: 480,
-      autoAllocationEnabled: true,
-      serviceRadiusKm: 12,
-      bio: 'Master barber specialized in precision skin fades, beard sculpting, and luxury hot towel treatments. 7+ years salon experience.',
-      user: {
-        _id: 'u-1',
-        name: 'Amit Kumar',
-        email: 'amit@barber.com',
-        phone: '+91 98765 11223',
-        role: 'BARBER',
-      },
-      distanceKm: 1.2,
-    },
-    {
-      _id: 'b-2',
-      userId: 'u-2',
-      experienceYears: 5,
-      rating: 4.91,
-      totalReviews: 98,
-      totalCompletedJobs: 320,
-      autoAllocationEnabled: true,
-      serviceRadiusKm: 10,
-      bio: 'Expert in modern texture cuts, beard styling, and organic hair spa therapies. Punctual doorstep service guaranteed.',
-      user: {
-        _id: 'u-2',
-        name: 'Ravi Sharma',
-        email: 'ravi@barber.com',
-        phone: '+91 98123 44556',
-        role: 'BARBER',
-      },
-      distanceKm: 2.7,
-    },
-    {
-      _id: 'b-3',
-      userId: 'u-3',
-      experienceYears: 8,
-      rating: 4.98,
-      totalReviews: 215,
-      totalCompletedJobs: 710,
-      autoAllocationEnabled: true,
-      serviceRadiusKm: 15,
-      bio: 'Celebrity stylist & luxury package specialist. Expert in charcoal facial detox, royal grooming packages, and scissor finish.',
-      user: {
-        _id: 'u-3',
-        name: 'Suresh Panda',
-        email: 'suresh@barber.com',
-        phone: '+91 94370 77889',
-        role: 'BARBER',
-      },
-      distanceKm: 4.3,
-    },
-  ];
-
+  // No placeholder barbers. The list previously fell back to three invented
+  // profiles with non-ObjectId ids, so picking one silently created an
+  // unassigned booking instead of a booking with that barber.
   const fetchNearby = async (lat: number, lng: number, r: number) => {
+    setLoading(true);
     try {
-      const data = await barbersApi.getNearby({ latitude: lat, longitude: lng, radiusKm: r });
-      if (Array.isArray(data) && data.length > 0) {
-        setBarbers(data);
-      } else {
-        setBarbers(defaultBarbers);
-      }
+      setBarbers(await barbersApi.getNearby({ latitude: lat, longitude: lng, radiusKm: r }));
     } catch {
-      setBarbers(defaultBarbers);
+      setBarbers([]);
+    } finally {
+      setLoading(false);
     }
   };
 
   useEffect(() => {
-    fetchLiveCoordinates(true).then((live) => {
-      setCoords(live);
-      fetchNearby(live.latitude, live.longitude, radiusKm);
-    });
+    void fetchLiveCoordinates(true).then((live) => setCoords(live));
   }, []);
 
   useEffect(() => {
-    fetchNearby(coords.latitude, coords.longitude, radiusKm);
+    void fetchNearby(coords.latitude, coords.longitude, radiusKm);
   }, [coords, radiusKm]);
 
   const handleUseMyLocation = async () => {
     setLocationLoading(true);
     try {
-      const live = await fetchLiveCoordinates(true);
-      setCoords(live);
+      setCoords(await fetchLiveCoordinates(true));
     } finally {
       setLocationLoading(false);
     }
   };
-
-  const displayBarbers = barbers.length > 0 ? barbers : defaultBarbers;
 
   return (
     <section id="radar" className="py-20 bg-[#090a0e] border-y border-white/[0.06] relative">
@@ -125,7 +61,8 @@ export const NearbyBarbersRadar: React.FC<NearbyBarbersRadarProps> = ({ onSelect
               Nearby Barber <span className="gradient-text-flow font-editorial italic font-normal">Partners</span>
             </h2>
             <p className="text-xs sm:text-sm text-gray-400 font-normal">
-              Select your preferred partner or allow automated dispatch to match the fastest available professional.
+              Pick the partner you want, or book without a preference and the salon team
+              will assign an available barber.
             </p>
           </div>
 
@@ -152,9 +89,26 @@ export const NearbyBarbersRadar: React.FC<NearbyBarbersRadarProps> = ({ onSelect
         </div>
 
         {/* Barbers Grid */}
+        {loading ? (
+          <div className="py-16 text-center">
+            <Navigation className="w-7 h-7 text-[#ff6c4c] animate-spin mx-auto" />
+            <p className="text-xs text-gray-400 mt-3">Finding barbers near you…</p>
+          </div>
+        ) : barbers.length === 0 ? (
+          <div className="py-16 text-center space-y-3 glass-card rounded-3xl border-white/[0.08]">
+            <div className="w-14 h-14 rounded-2xl bg-[#ff6c4c]/10 border border-[#ff6c4c]/25 flex items-center justify-center mx-auto text-[#ff6c4c]">
+              <MapPin className="w-7 h-7" />
+            </div>
+            <h4 className="font-bold text-white text-sm">No barbers within {radiusKm} km</h4>
+            <p className="text-xs text-gray-400 max-w-sm mx-auto">
+              Try a wider radius, or book without a preference — the salon team will assign
+              an available barber to your request.
+            </p>
+          </div>
+        ) : (
         <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
-          {displayBarbers.map((barber) => {
-            const distance = barber.distanceKm ?? 1.8;
+          {barbers.map((barber) => {
+            const distance = barber.distanceKm ?? 0;
             const etaMins = Math.max(10, Math.round(distance * 6 + 5));
 
             return (
@@ -233,6 +187,7 @@ export const NearbyBarbersRadar: React.FC<NearbyBarbersRadarProps> = ({ onSelect
             );
           })}
         </div>
+        )}
 
       </div>
     </section>

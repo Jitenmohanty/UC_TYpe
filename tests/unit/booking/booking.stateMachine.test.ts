@@ -6,7 +6,7 @@ import { BookingStateError } from '../../../src/common/errors/AppError';
 // Mock the repository
 vi.mock('../../../src/modules/bookings/booking.repository', () => ({
   bookingRepository: {
-    updateStatus: vi.fn().mockResolvedValue({ status: 'CONFIRMED' }),
+    compareAndSetStatus: vi.fn().mockResolvedValue({ status: 'CONFIRMED' }),
   },
 }));
 
@@ -17,83 +17,122 @@ describe('BookingStateMachine', () => {
     machine = new BookingStateMachine();
   });
 
-  describe('canTransition', () => {
-    it('should allow PENDING → SEARCHING', () => {
-      expect(machine.canTransition(BookingStatus.PENDING, BookingStatus.SEARCHING)).toBe(true);
+  describe('the manual-assignment happy path', () => {
+    it('allows PENDING → CONFIRMED (barber claims, or admin assigns)', () => {
+      expect(machine.canTransition(BookingStatus.PENDING, BookingStatus.CONFIRMED)).toBe(true);
     });
 
-    it('should allow SEARCHING → OFFERED', () => {
-      expect(machine.canTransition(BookingStatus.SEARCHING, BookingStatus.OFFERED)).toBe(true);
+    it('allows PENDING → OFFERED (customer picked a specific barber)', () => {
+      expect(machine.canTransition(BookingStatus.PENDING, BookingStatus.OFFERED)).toBe(true);
     });
 
-    it('should allow OFFERED → CONFIRMED', () => {
+    it('allows OFFERED → CONFIRMED (that barber accepted)', () => {
       expect(machine.canTransition(BookingStatus.OFFERED, BookingStatus.CONFIRMED)).toBe(true);
     });
 
-    it('should allow CONFIRMED → IN_PROGRESS', () => {
+    it('allows CONFIRMED → IN_PROGRESS (OTP verified)', () => {
       expect(machine.canTransition(BookingStatus.CONFIRMED, BookingStatus.IN_PROGRESS)).toBe(true);
     });
 
-    it('should allow IN_PROGRESS → COMPLETED', () => {
+    it('allows IN_PROGRESS → COMPLETED', () => {
       expect(machine.canTransition(BookingStatus.IN_PROGRESS, BookingStatus.COMPLETED)).toBe(true);
-    });
-
-    it('should allow CONFIRMED → BARBER_CANCELLED', () => {
-      expect(machine.canTransition(BookingStatus.CONFIRMED, BookingStatus.BARBER_CANCELLED)).toBe(true);
-    });
-
-    it('should allow BARBER_CANCELLED → SEARCHING', () => {
-      expect(machine.canTransition(BookingStatus.BARBER_CANCELLED, BookingStatus.SEARCHING)).toBe(true);
-    });
-
-    it('should NOT allow COMPLETED → any status', () => {
-      Object.values(BookingStatus).forEach((status) => {
-        expect(machine.canTransition(BookingStatus.COMPLETED, status as BookingStatus)).toBe(false);
-      });
-    });
-
-    it('should NOT allow CUSTOMER_CANCELLED → any status', () => {
-      Object.values(BookingStatus).forEach((status) => {
-        expect(machine.canTransition(BookingStatus.CUSTOMER_CANCELLED, status as BookingStatus)).toBe(false);
-      });
-    });
-
-    it('should NOT allow PENDING → COMPLETED (skip steps)', () => {
-      expect(machine.canTransition(BookingStatus.PENDING, BookingStatus.COMPLETED)).toBe(false);
-    });
-
-    it('should NOT allow SEARCHING → CONFIRMED (skip OFFERED)', () => {
-      expect(machine.canTransition(BookingStatus.SEARCHING, BookingStatus.CONFIRMED)).toBe(false);
     });
   });
 
-  describe('assertTransition', () => {
-    it('should throw BookingStateError for invalid transition', () => {
-      expect(() => machine.assertTransition(BookingStatus.COMPLETED, BookingStatus.CONFIRMED))
-        .toThrow(BookingStateError);
+  describe('returning a booking to the open pool', () => {
+    it('allows OFFERED → PENDING when the chosen barber declines', () => {
+      expect(machine.canTransition(BookingStatus.OFFERED, BookingStatus.PENDING)).toBe(true);
     });
 
-    it('should not throw for valid transition', () => {
-      expect(() => machine.assertTransition(BookingStatus.PENDING, BookingStatus.SEARCHING))
-        .not.toThrow();
+    it('allows CONFIRMED → BARBER_CANCELLED when the barber backs out', () => {
+      expect(machine.canTransition(BookingStatus.CONFIRMED, BookingStatus.BARBER_CANCELLED)).toBe(true);
+    });
+
+    it('allows BARBER_CANCELLED → PENDING so another barber can take it', () => {
+      expect(machine.canTransition(BookingStatus.BARBER_CANCELLED, BookingStatus.PENDING)).toBe(true);
+    });
+
+    it('does NOT send a cancelled booking straight back to CONFIRMED', () => {
+      expect(machine.canTransition(BookingStatus.BARBER_CANCELLED, BookingStatus.CONFIRMED)).toBe(false);
+    });
+  });
+
+  describe('terminal statuses', () => {
+    it.each([
+      BookingStatus.COMPLETED,
+      BookingStatus.CUSTOMER_CANCELLED,
+      BookingStatus.ADMIN_CANCELLED,
+      BookingStatus.EXPIRED,
+    ])('%s permits no further transition', (terminal) => {
+      Object.values(BookingStatus).forEach((next) => {
+        expect(machine.canTransition(terminal, next as BookingStatus)).toBe(false);
+      });
+    });
+  });
+
+  describe('step-skipping is rejected', () => {
+    it('PENDING → COMPLETED', () => {
+      expect(machine.canTransition(BookingStatus.PENDING, BookingStatus.COMPLETED)).toBe(false);
+    });
+
+    it('PENDING → IN_PROGRESS (must be CONFIRMED first)', () => {
+      expect(machine.canTransition(BookingStatus.PENDING, BookingStatus.IN_PROGRESS)).toBe(false);
+    });
+
+    it('OFFERED → IN_PROGRESS', () => {
+      expect(machine.canTransition(BookingStatus.OFFERED, BookingStatus.IN_PROGRESS)).toBe(false);
     });
   });
 
   describe('cancellation by customer', () => {
-    it('should allow customer cancel from SEARCHING', () => {
-      expect(machine.canTransition(BookingStatus.SEARCHING, BookingStatus.CUSTOMER_CANCELLED)).toBe(true);
-    });
+    it.each([BookingStatus.PENDING, BookingStatus.OFFERED, BookingStatus.CONFIRMED])(
+      'is allowed from %s',
+      (from) => {
+        expect(machine.canTransition(from, BookingStatus.CUSTOMER_CANCELLED)).toBe(true);
+      },
+    );
 
-    it('should allow customer cancel from OFFERED', () => {
-      expect(machine.canTransition(BookingStatus.OFFERED, BookingStatus.CUSTOMER_CANCELLED)).toBe(true);
-    });
-
-    it('should allow customer cancel from CONFIRMED', () => {
-      expect(machine.canTransition(BookingStatus.CONFIRMED, BookingStatus.CUSTOMER_CANCELLED)).toBe(true);
-    });
-
-    it('should NOT allow customer cancel from COMPLETED', () => {
+    it('is not allowed from COMPLETED', () => {
       expect(machine.canTransition(BookingStatus.COMPLETED, BookingStatus.CUSTOMER_CANCELLED)).toBe(false);
+    });
+
+    it('is not allowed from IN_PROGRESS — the barber is already on site', () => {
+      expect(machine.canTransition(BookingStatus.IN_PROGRESS, BookingStatus.CUSTOMER_CANCELLED)).toBe(false);
+    });
+  });
+
+  describe('admin cancellation', () => {
+    it.each([
+      BookingStatus.PENDING,
+      BookingStatus.OFFERED,
+      BookingStatus.CONFIRMED,
+      BookingStatus.IN_PROGRESS,
+    ])('is allowed from %s', (from) => {
+      expect(machine.canTransition(from, BookingStatus.ADMIN_CANCELLED)).toBe(true);
+    });
+  });
+
+  describe('legacy auto-allocation rows', () => {
+    it('SEARCHING can be pulled back into the pool', () => {
+      expect(machine.canTransition(BookingStatus.SEARCHING, BookingStatus.PENDING)).toBe(true);
+    });
+
+    it('NO_BARBER_AVAILABLE can be pulled back into the pool', () => {
+      expect(machine.canTransition(BookingStatus.NO_BARBER_AVAILABLE, BookingStatus.PENDING)).toBe(true);
+    });
+  });
+
+  describe('assertTransition', () => {
+    it('throws BookingStateError for an invalid transition', () => {
+      expect(() =>
+        machine.assertTransition(BookingStatus.COMPLETED, BookingStatus.CONFIRMED),
+      ).toThrow(BookingStateError);
+    });
+
+    it('does not throw for a valid transition', () => {
+      expect(() =>
+        machine.assertTransition(BookingStatus.PENDING, BookingStatus.CONFIRMED),
+      ).not.toThrow();
     });
   });
 });

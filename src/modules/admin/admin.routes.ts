@@ -1,30 +1,33 @@
 import { Router } from 'express';
+import mongoose, { Types } from 'mongoose';
 import { authenticate } from '../../common/middleware/authenticate';
 import { requireRole } from '../../common/middleware/requireRole';
+import { validate } from '../../common/middleware/validate';
 import { asyncHandler } from '../../common/utils/asyncHandler';
 import { sendSuccess } from '../../common/utils/response';
 import { bookingRepository } from '../bookings/booking.repository';
+import { bookingStateMachine } from '../bookings/booking.stateMachine';
 import { barberProfileRepository } from '../barbers/barberProfile.repository';
 import { assignmentRepository } from '../assignments/assignment.repository';
-import { allocationService } from '../allocation/allocation.service';
+import { assignmentStateMachine } from '../assignments/assignment.stateMachine';
 import { assignmentService } from '../assignments/assignment.service';
-import { bookingStateMachine } from '../bookings/booking.stateMachine';
-import { AllocationFailureModel } from '../allocation/allocationFailure.model';
+import { AssignmentSource } from '../assignments/assignment.model';
+import { notificationService } from '../notifications/notification.service';
 import { AuditLogModel } from '../../audit/auditLog.model';
 import { auditService } from '../../audit/audit.service';
-import { userRepository } from '../users/user.repository';
-import { NotFoundError, ValidationError } from '../../common/errors/AppError';
+import { NotFoundError } from '../../common/errors/AppError';
 import { BookingStatus } from '../../common/constants/bookingStates';
+import { AssignmentStatus } from '../../common/constants/assignmentStates';
 import { BarberStatus, UserRole } from '../../common/constants/roles';
-import { parsePagination } from '../../common/utils/pagination';
-import { validate } from '../../common/middleware/validate';
-import { Types } from 'mongoose';
+import { parsePagination, buildPaginatedResult } from '../../common/utils/pagination';
 import { z } from 'zod';
 
 export const adminRoutes = Router();
 
 adminRoutes.use(authenticate);
 adminRoutes.use(requireRole(UserRole.ADMIN));
+
+const objectId = z.string().regex(/^[0-9a-fA-F]{24}$/, 'Invalid id');
 
 // ─── Bookings ─────────────────────────────────────────────────────────────────
 adminRoutes.get(
@@ -38,138 +41,137 @@ adminRoutes.get(
   }),
 );
 
-// Manual barber assignment
+/**
+ * Real platform counters for the dashboard tiles — previously the frontend
+ * displayed hardcoded placeholder figures.
+ */
+adminRoutes.get(
+  '/stats',
+  asyncHandler(async (_req, res) => {
+    const [byStatus, completedRevenue, barbers] = await Promise.all([
+      bookingRepository.countByStatus(),
+      bookingRepository.sumCompletedRevenue(),
+      barberProfileRepository.findAll({}, { page: 1, limit: 1 }),
+    ]);
+
+    const total = Object.values(byStatus).reduce((sum, n) => sum + n, 0);
+    const completed = byStatus[BookingStatus.COMPLETED] ?? 0;
+    const awaitingAssignment =
+      (byStatus[BookingStatus.PENDING] ?? 0) +
+      (byStatus[BookingStatus.BARBER_CANCELLED] ?? 0) +
+      (byStatus[BookingStatus.SEARCHING] ?? 0) +
+      (byStatus[BookingStatus.NO_BARBER_AVAILABLE] ?? 0);
+
+    sendSuccess(res, {
+      totalBookings: total,
+      completedBookings: completed,
+      awaitingAssignment,
+      inProgress: byStatus[BookingStatus.IN_PROGRESS] ?? 0,
+      confirmed: byStatus[BookingStatus.CONFIRMED] ?? 0,
+      completedRevenue,
+      completionRate: total > 0 ? Math.round((completed / total) * 1000) / 10 : 0,
+      totalBarbers: barbers.total,
+      byStatus,
+    });
+  }),
+);
+
+/**
+ * Hand-assign a barber to a booking.
+ *
+ * Shares assignmentService.assignBarber with the barber self-claim path, so
+ * both get the same lock, transaction, duplicate-assignment guard, slot-conflict
+ * check and state-machine validation. Previously this route wrote the
+ * assignment and booking status directly, with none of those.
+ */
 adminRoutes.post(
   '/bookings/:bookingId/assign',
   validate({
-    params: z.object({ bookingId: z.string().regex(/^[0-9a-fA-F]{24}$/) }),
-    body: z.object({ barberId: z.string().regex(/^[0-9a-fA-F]{24}$/) }),
+    params: z.object({ bookingId: objectId }),
+    body: z.object({ barberId: objectId }),
   }),
   asyncHandler(async (req, res) => {
     const { bookingId } = req.params as { bookingId: string };
     const { barberId } = req.body as { barberId: string };
 
-    const barberProfile = await barberProfileRepository.findById(barberId);
-    if (!barberProfile || barberProfile.status !== BarberStatus.ACTIVE) {
-      throw new NotFoundError('Active barber');
-    }
+    const assignment = await assignmentService.assignBarber({
+      bookingId,
+      barberProfileId: barberId,
+      source: AssignmentSource.ADMIN_ASSIGN,
+      actorId: req.user!.userId,
+      actorRole: UserRole.ADMIN,
+    });
 
-    // Override: directly create assignment and confirm booking
+    sendSuccess(res, { assignment }, 'Barber assigned and booking confirmed');
+  }),
+);
+
+adminRoutes.post(
+  '/bookings/:bookingId/cancel',
+  validate({
+    params: z.object({ bookingId: objectId }),
+    body: z.object({ reason: z.string().max(500).optional() }),
+  }),
+  asyncHandler(async (req, res) => {
+    const bookingId = req.params['bookingId']!;
     const booking = await bookingRepository.findByIdLean(new Types.ObjectId(bookingId));
     if (!booking) throw new NotFoundError('Booking');
 
-    const { AssignmentStatus } = await import('../../common/constants/assignmentStates');
-    const assignment = await assignmentRepository.create({
-      bookingId: new Types.ObjectId(bookingId),
-      barberId: new Types.ObjectId(barberId),
-      status: AssignmentStatus.ACCEPTED,
-      acceptedAt: new Date(),
-      allocationAttempt: booking.allocationAttempts + 1,
-    });
+    const reason = (req.body as { reason?: string }).reason ?? 'Cancelled by administrator';
+    const activeAssignment = await assignmentRepository.findActiveByBookingId(booking._id);
 
+    const session = await mongoose.startSession();
+    try {
+      await session.withTransaction(async () => {
+        await bookingStateMachine.transition(
+          booking._id,
+          booking.status,
+          BookingStatus.ADMIN_CANCELLED,
+          {
+            cancellationReason: reason,
+            cancelledBy: req.user!.userId,
+            cancelledAt: new Date(),
+          },
+          session,
+        );
 
-    const { generateOtp, hashOtp } = await import('../../common/utils/otp.utils');
-    const { twilioService } = await import('../../common/services/twilio.service');
-    const otpPlain = generateOtp();
-    const otpHash = hashOtp(otpPlain);
-    const otpExpiry = new Date(Date.now() + 30 * 60 * 1000);
-
-    await bookingRepository.updateStatus(booking._id, BookingStatus.CONFIRMED, {
-      serviceOtp: otpHash,
-      serviceOtpRaw: otpPlain,
-      serviceOtpExpiresAt: otpExpiry,
-      serviceOtpAttempts: 0,
-    } as never);
-
-    const customerUser = await userRepository.findById(booking.customerId);
-    const barberUser = await userRepository.findById(barberProfile.userId);
-
-    if (customerUser?.phone) {
-      await twilioService.sendServiceOtpSms({
-        toPhone: customerUser.phone,
-        customerName: customerUser.name || 'Valued Customer',
-        barberName: barberUser?.name || 'Your Assigned Barber',
-        otp: otpPlain,
-        serviceName: booking.serviceSnapshot.name,
-        bookingNumber: booking.bookingNumber,
+        if (activeAssignment) {
+          await assignmentStateMachine.transition(
+            activeAssignment._id,
+            activeAssignment.status,
+            AssignmentStatus.CANCELLED_BY_CUSTOMER,
+            { cancellationReason: reason, cancelledBy: req.user!.userId },
+            session,
+          );
+        }
       });
+    } finally {
+      await session.endSession();
     }
 
-    await auditService.log({
-      actorId: req.user!.userId,
-      actorRole: UserRole.ADMIN,
-      action: 'ADMIN_MANUAL_ASSIGNMENT',
-      entityType: 'Booking',
-      entityId: bookingId,
-      metadata: { barberId, assignmentId: assignment._id.toString() },
-    });
-
-    sendSuccess(res, { assignment }, 'Barber manually assigned');
-  }),
-);
-
-// Trigger reallocation
-adminRoutes.post(
-  '/bookings/:bookingId/reallocate',
-  asyncHandler(async (req, res) => {
-    await allocationService.reallocate(req.params['bookingId']!);
-    sendSuccess(res, null, 'Reallocation triggered');
-  }),
-);
-
-// Admin cancel booking
-adminRoutes.post(
-  '/bookings/:bookingId/cancel',
-  asyncHandler(async (req, res) => {
-    const booking = await bookingRepository.findByIdLean(new Types.ObjectId(req.params['bookingId']!));
-    if (!booking) throw new NotFoundError('Booking');
-
-    const reason = (req.body as { reason?: string }).reason ?? 'Admin cancelled';
-
-    await bookingStateMachine.transition(
-      booking._id,
-      booking.status,
-      BookingStatus.ADMIN_CANCELLED,
-      {
-        cancellationReason: reason,
-        cancelledBy: req.user!.userId,
-        cancelledAt: new Date(),
-      },
+    await notificationService.notifyCustomerBookingCancelled(
+      booking.customerId,
+      bookingId,
+      reason,
     );
 
-    // Cancel any active or offered assignment for this booking
-    const activeAssignment = await assignmentRepository.findActiveByBookingId(booking._id);
     if (activeAssignment) {
-      const { AssignmentStatus } = await import('../../common/constants/assignmentStates');
-      await assignmentRepository.updateStatus(activeAssignment._id, AssignmentStatus.CANCELLED_BY_CUSTOMER, {
-        cancellationReason: reason,
-        cancelledAt: new Date(),
-      });
-      const { emitToUser } = await import('../../sockets/socket.server');
-      const { SocketEvents } = await import('../../sockets/socket.events');
-      emitToUser(activeAssignment.barberId.toString(), SocketEvents.BOOKING_CANCELLED, {
-        bookingId: booking._id.toString(),
-        reason,
-      });
+      const profile = await barberProfileRepository.findById(activeAssignment.barberId);
+      if (profile) {
+        await notificationService.notifyBarberBookingCancelled(profile.userId, bookingId, reason);
+      }
     }
-
-    const { emitToUser } = await import('../../sockets/socket.server');
-    const { SocketEvents } = await import('../../sockets/socket.events');
-    emitToUser(booking.customerId.toString(), SocketEvents.BOOKING_CANCELLED, {
-      bookingId: booking._id.toString(),
-      reason,
-    });
 
     await auditService.log({
       actorId: req.user!.userId,
       actorRole: UserRole.ADMIN,
       action: 'ADMIN_CANCELLED_BOOKING',
       entityType: 'Booking',
-      entityId: req.params['bookingId']!,
+      entityId: bookingId,
       metadata: { reason },
     });
 
-    sendSuccess(res, null, 'Booking cancelled by admin');
+    sendSuccess(res, null, 'Booking cancelled');
   }),
 );
 
@@ -186,7 +188,7 @@ adminRoutes.get(
 adminRoutes.patch(
   '/barbers/:barberId/status',
   validate({
-    params: z.object({ barberId: z.string().regex(/^[0-9a-fA-F]{24}$/) }),
+    params: z.object({ barberId: objectId }),
     body: z.object({ status: z.enum(['ACTIVE', 'INACTIVE', 'SUSPENDED']) }),
   }),
   asyncHandler(async (req, res) => {
@@ -207,33 +209,19 @@ adminRoutes.patch(
   }),
 );
 
-// ─── Allocation Failures ──────────────────────────────────────────────────────
-adminRoutes.get(
-  '/allocation-failures',
-  asyncHandler(async (req, res) => {
-    const pagination = parsePagination(req.query as Record<string, unknown>);
-    const { page = 1, limit = 20 } = pagination;
-    const failures = await AllocationFailureModel.find()
-      .sort({ createdAt: -1 })
-      .skip((page - 1) * limit)
-      .limit(limit)
-      .populate('bookingId', 'bookingNumber customerId')
-      .exec();
-    sendSuccess(res, failures);
-  }),
-);
-
 // ─── Audit Logs ───────────────────────────────────────────────────────────────
 adminRoutes.get(
   '/audit-logs',
   asyncHandler(async (req, res) => {
-    const pagination = parsePagination(req.query as Record<string, unknown>);
-    const { page = 1, limit = 20 } = pagination;
-    const logs = await AuditLogModel.find()
-      .sort({ createdAt: -1 })
-      .skip((page - 1) * limit)
-      .limit(limit)
-      .exec();
-    sendSuccess(res, logs);
+    const { page, limit } = parsePagination(req.query as Record<string, unknown>);
+    const [data, total] = await Promise.all([
+      AuditLogModel.find()
+        .sort({ createdAt: -1 })
+        .skip((page - 1) * limit)
+        .limit(limit)
+        .exec(),
+      AuditLogModel.countDocuments().exec(),
+    ]);
+    sendSuccess(res, buildPaginatedResult(data, total, page, limit));
   }),
 );

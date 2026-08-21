@@ -1,462 +1,235 @@
-import React, { useState, useEffect } from 'react';
-import type { BarberProfile, Assignment, ServiceItem } from '../types';
-import { barbersApi, assignmentApi, bookingApi, servicesApi, adminApi } from '../services/api';
-import { ShieldCheck, ToggleLeft, ToggleRight, MapPin, Navigation, Clock, CheckCircle2, XCircle, KeyRound, Loader2, Phone, ExternalLink, Calendar, RefreshCw, X, Sparkles, Scissors } from 'lucide-react';
+import React, { useState, useEffect, useCallback, useRef } from 'react';
+import type { Assignment, BarberProfile, Booking } from '../types';
+import { barbersApi, assignmentApi, bookingApi, apiErrorMessage } from '../services/api';
+import {
+  ShieldCheck, ToggleLeft, ToggleRight, MapPin, Navigation, Clock, CheckCircle2,
+  XCircle, KeyRound, Loader2, Phone, ExternalLink, Calendar, RefreshCw, X,
+  Sparkles, Scissors, AlertCircle, Inbox,
+} from 'lucide-react';
 
 interface BarberDashboardProps {
-  user: any;
+  user: { _id?: string; name?: string } | null;
 }
+
+/** How often the dashboard re-fetches from the server. */
+const POLL_INTERVAL_MS = 10000;
+
+/** Assignment statuses where the barber is actively working the job. */
+const IN_FLIGHT: Assignment['status'][] = ['ACCEPTED', 'EN_ROUTE', 'ARRIVED', 'IN_PROGRESS'];
+
+const bookingOf = (a: Assignment | null): Booking | null =>
+  a && typeof a.bookingId === 'object' ? (a.bookingId as Booking) : null;
 
 export const BarberDashboard: React.FC<BarberDashboardProps> = ({ user }) => {
   const [profile, setProfile] = useState<BarberProfile | null>(null);
-  const [autoAllocation, setAutoAllocation] = useState<boolean>(true);
-  const [latitude, setLatitude] = useState<number>(19.3068);
-  const [longitude, setLongitude] = useState<number>(84.8080);
-  const [pendingAssignment, setPendingAssignment] = useState<Assignment | null>(null);
+  const [acceptingBookings, setAcceptingBookings] = useState<boolean>(false);
+  const [latitude, setLatitude] = useState<number>(20.2961);
+  const [longitude, setLongitude] = useState<number>(85.8245);
+
+  // Server-owned state
   const [activeAssignment, setActiveAssignment] = useState<Assignment | null>(null);
-  const [statusMessage, setStatusMessage] = useState<string | null>(null);
+  const [openBookings, setOpenBookings] = useState<Booking[]>([]);
+  const [pastJobs, setPastJobs] = useState<Assignment[]>([]);
+
+  const [loading, setLoading] = useState<boolean>(true);
   const [refreshing, setRefreshing] = useState(false);
-  const [availableServices, setAvailableServices] = useState<ServiceItem[]>([]);
-  const [simIndex, setSimIndex] = useState<number>(0);
+  const [statusMessage, setStatusMessage] = useState<string | null>(null);
+  const [errorMessage, setErrorMessage] = useState<string | null>(null);
 
-  // Open / Pending Marketplace Bookings state
-  const [openBookings, setOpenBookings] = useState<any[]>([]);
   const [claimingBookingId, setClaimingBookingId] = useState<string | null>(null);
+  const [busyAction, setBusyAction] = useState<string | null>(null);
 
-  // Reject / Cancel with Reason state
+  // Reject / cancel modals
   const [rejectModalOpen, setRejectModalOpen] = useState(false);
   const [rejectReason, setRejectReason] = useState('');
-  const [rejecting, setRejecting] = useState(false);
+  const [cancelModalOpen, setCancelModalOpen] = useState(false);
+  const [cancelReason, setCancelReason] = useState('');
 
-  // Active Job Barber Cancellation state
-  const [cancelActiveModalOpen, setCancelActiveModalOpen] = useState(false);
-  const [cancelActiveReason, setCancelActiveReason] = useState('');
-  const [cancellingActive, setCancellingActive] = useState(false);
-
-  // OTP verification state
+  // OTP entry
+  const [showOtpForm, setShowOtpForm] = useState(false);
   const [otpDigits, setOtpDigits] = useState<string[]>(['', '', '', '', '', '']);
   const [otpError, setOtpError] = useState<string | null>(null);
   const [otpVerifying, setOtpVerifying] = useState(false);
-  const [otpVerified, setOtpVerified] = useState(false);
-  const [showOtpForm, setShowOtpForm] = useState(false);
-  const [pastJobs, setPastJobs] = useState<any[]>([]);
-  const [loadingJobs, setLoadingJobs] = useState<boolean>(false);
 
-  const fetchOpenBookings = async () => {
-    try {
-      const res = await barbersApi.getOpenBookings({ limit: 50 });
-      if (res?.items) {
-        const unassigned = res.items.filter((b: any) =>
-          ['PENDING', 'SEARCHING', 'OFFERED', 'BARBER_CANCELLED', 'NO_BARBER_AVAILABLE'].includes(b.status)
-        );
-        setOpenBookings(unassigned);
-      }
-    } catch {
-      // Fallback
+  const flash = useCallback((msg: string, isError = false) => {
+    if (isError) {
+      setErrorMessage(msg);
+      setStatusMessage(null);
+      setTimeout(() => setErrorMessage(null), 6000);
+    } else {
+      setStatusMessage(msg);
+      setErrorMessage(null);
+      setTimeout(() => setStatusMessage(null), 4000);
     }
-  };
+  }, []);
 
-  const fetchPastJobs = async () => {
-    setLoadingJobs(true);
+  // ─── Data loading ───────────────────────────────────────────────────────────
+  // `silent` keeps background polls from flashing spinners over the UI.
+  const loadDashboard = useCallback(async (silent = false) => {
+    if (!silent) setRefreshing(true);
     try {
-      const data = await barbersApi.getMyBookings({ limit: 50 });
-      setPastJobs(Array.isArray(data) ? data : (data as any)?.items || []);
-    } catch {
-      // Fallback
-    } finally {
-      setLoadingJobs(false);
-    }
-  };
-
-  const refreshDashboard = async () => {
-    setRefreshing(true);
-    try {
-      const assignment = await assignmentApi.getPending();
-      if (assignment) {
-        if (assignment.status === 'OFFERED') {
-          setPendingAssignment(assignment);
-        } else if (['ACCEPTED', 'EN_ROUTE', 'ARRIVED', 'IN_PROGRESS'].includes(assignment.status)) {
-          setActiveAssignment(assignment);
-          if (assignment.status === 'ARRIVED') {
-            setShowOtpForm(true);
-          }
-        }
-      } else {
-        setPendingAssignment(null);
-      }
-      await Promise.allSettled([
-        fetchPastJobs(),
-        fetchOpenBookings(),
+      const [assignment, pool, jobs] = await Promise.all([
+        barbersApi.getActiveAssignment(),
+        barbersApi.getOpenBookings({ limit: 50 }),
+        barbersApi.getMyJobs({ limit: 50 }),
       ]);
-      setStatusMessage('Dashboard updated with latest booking records.');
-    } catch {
-      setStatusMessage('Dashboard refreshed.');
+
+      setActiveAssignment(assignment);
+      setOpenBookings(pool.data);
+      setPastJobs(jobs);
+
+      // The server decides when the OTP step is available — never local state.
+      // (Previously ARRIVED lived only in the browser and vanished on refresh.)
+      if (assignment?.status !== 'ARRIVED') {
+        setShowOtpForm(false);
+      }
+    } catch (err) {
+      if (!silent) flash(apiErrorMessage(err, 'Could not load your dashboard.'), true);
     } finally {
-      setRefreshing(false);
-      setTimeout(() => setStatusMessage(null), 3000);
+      setLoading(false);
+      if (!silent) setRefreshing(false);
     }
-  };
+  }, [flash]);
+
+  const loadProfile = useCallback(async () => {
+    try {
+      const data = await barbersApi.getMe();
+      setProfile(data);
+      setAcceptingBookings(data.autoAllocationEnabled);
+      if (data.currentLocation?.coordinates) {
+        setLongitude(data.currentLocation.coordinates[0]);
+        setLatitude(data.currentLocation.coordinates[1]);
+      }
+    } catch (err) {
+      // No silent fake profile — the barber needs to know their profile is missing.
+      flash(apiErrorMessage(err, 'Could not load your barber profile.'), true);
+    }
+  }, [flash]);
 
   useEffect(() => {
-    refreshDashboard();
-    fetchOpenBookings();
-    // Fetch real catalog services
-    servicesApi.getAll()
-      .then((data) => {
-        if (Array.isArray(data) && data.length > 0) {
-          setAvailableServices(data);
-        }
-      })
-      .catch(() => {});
+    void loadProfile();
+    void loadDashboard();
+  }, [loadProfile, loadDashboard]);
 
-    barbersApi.getMe()
-      .then((data) => {
-        setProfile(data);
-        setAutoAllocation(data.autoAllocationEnabled);
-        if (data.currentLocation?.coordinates) {
-          setLongitude(data.currentLocation.coordinates[0]);
-          setLatitude(data.currentLocation.coordinates[1]);
-        }
-      })
-      .catch(() => {
-        setProfile({
-          _id: 'b-me',
-          userId: user?._id || 'u-me',
-          experienceYears: 6,
-          rating: 4.95,
-          totalReviews: 120,
-          totalCompletedJobs: 340,
-          autoAllocationEnabled: true,
-          serviceRadiusKm: 10,
-        });
-      });
-  }, [user]);
+  // Poll so admin assignments and new customer bookings appear on their own.
+  const pollRef = useRef(loadDashboard);
+  pollRef.current = loadDashboard;
+  useEffect(() => {
+    const id = setInterval(() => void pollRef.current(true), POLL_INTERVAL_MS);
+    return () => clearInterval(id);
+  }, []);
 
-  const handleSimulateOffer = () => {
-    const catalogServices = availableServices.length > 0 ? availableServices : [
-      { _id: 's1', name: 'Executive Haircut & Styling', price: 399, durationMinutes: 45, description: '', status: 'ACTIVE' },
-      { _id: 's2', name: 'Beard Sculpting & Hot Oil Spa', price: 249, durationMinutes: 30, description: '', status: 'ACTIVE' },
-      { _id: 's3', name: 'Full Royal Deluxe Package', price: 699, durationMinutes: 75, description: '', status: 'ACTIVE' },
-      { _id: 's4', name: 'Haircut + Beard Glow Duo', price: 499, durationMinutes: 60, description: '', status: 'ACTIVE' },
-      { _id: 's5', name: 'Scalp Detox & Hair Spa Treatment', price: 599, durationMinutes: 50, description: '', status: 'ACTIVE' },
-      { _id: 's6', name: 'Charcoal De-Tan Facial Glow', price: 449, durationMinutes: 40, description: '', status: 'ACTIVE' },
-    ];
-
-    const customerPool = [
-      {
-        name: 'Priya Mishra',
-        phone: '+91 98765 43210',
-        email: 'priya@example.com',
-        houseNo: 'House #402, Royal Palms Residency',
-        landmark: 'Near Gandhi Nagar Park',
-        address: 'Gandhi Nagar, Brahmapur, Odisha 760001',
-        serviceOffset: 0,
-      },
-      {
-        name: 'Priya Mishra (Repeat Booking)',
-        phone: '+91 98765 43210',
-        email: 'priya@example.com',
-        houseNo: 'House #402, Royal Palms Residency',
-        landmark: 'Near Gandhi Nagar Park',
-        address: 'Gandhi Nagar, Brahmapur, Odisha 760001',
-        serviceOffset: 1,
-      },
-      {
-        name: 'Rahul Verma',
-        phone: '+91 98123 45678',
-        email: 'rahul@example.com',
-        houseNo: 'Flat 12B, Green Heights',
-        landmark: 'Opposite Utkal Cinema',
-        address: 'Main Road, Brahmapur, Odisha 760002',
-        serviceOffset: 2,
-      },
-      {
-        name: 'Ananya Patnaik',
-        phone: '+91 94370 88990',
-        email: 'ananya@example.com',
-        houseNo: 'Plot 89, Hill View Colony',
-        landmark: 'Near Engineering School',
-        address: 'Engineering School Road, Brahmapur, Odisha 760010',
-        serviceOffset: 3,
-      },
-      {
-        name: 'Siddharth Mohanty',
-        phone: '+91 70081 22334',
-        email: 'siddharth@example.com',
-        houseNo: 'Villa 7, Nilachal Enclave',
-        landmark: 'Near Khallikote College',
-        address: 'Khallikote Area, Brahmapur, Odisha 760001',
-        serviceOffset: 4,
-      },
-    ];
-
-    const customer = customerPool[simIndex % customerPool.length];
-    const service = catalogServices[(simIndex + customer.serviceOffset) % catalogServices.length];
-    setSimIndex((prev) => prev + 1);
-
-    const randomBookingNumber = `BK-${Date.now().toString(36).slice(-4).toUpperCase()}-${Math.floor(100 + Math.random() * 900)}`;
-    const now = new Date();
-    const startTimeStr = `${now.getHours().toString().padStart(2, '0')}:${now.getMinutes().toString().padStart(2, '0')}`;
-    const todayStr = now.toISOString().split('T')[0];
-
-    const simulatedOffer: Assignment = {
-      _id: `assign-${Date.now()}`,
-      bookingId: {
-        _id: `b-sim-${Date.now()}`,
-        bookingNumber: randomBookingNumber,
-        customerId: {
-          _id: `u-sim-${Date.now()}`,
-          name: customer.name,
-          phone: customer.phone,
-          email: customer.email,
-          role: 'CUSTOMER',
-        },
-        serviceId: service._id,
-        serviceSnapshot: {
-          name: service.name,
-          price: service.price,
-          durationMinutes: service.durationMinutes,
-        },
-        addressSnapshot: {
-          formattedAddress: customer.address,
-          houseNumber: customer.houseNo,
-          landmark: customer.landmark,
-          contactPhone: customer.phone,
-          city: 'Brahmapur',
-          state: 'Odisha',
-          country: 'India',
-        },
-        scheduledDate: todayStr,
-        startTime: startTimeStr,
-        endTime: `${(now.getHours() + 1).toString().padStart(2, '0')}:${now.getMinutes().toString().padStart(2, '0')}`,
-        customerLocation: {
-          type: 'Point',
-          coordinates: [longitude || 84.808, latitude || 19.3068],
-        },
-        status: 'OFFERED',
-        createdAt: new Date().toISOString(),
-      } as any,
-      barberId: profile?._id || 'b-1',
-      status: 'OFFERED',
-      offeredAt: new Date().toISOString(),
-      expiresAt: new Date(Date.now() + 60000).toISOString(),
-    };
-
-    setPendingAssignment(simulatedOffer);
-    setStatusMessage(`⚡ New incoming dispatch offer from ${customer.name} for "${service.name}"!`);
+  // ─── Actions ────────────────────────────────────────────────────────────────
+  const runAction = async (key: string, fn: () => Promise<string>) => {
+    setBusyAction(key);
+    try {
+      flash(await fn());
+      await loadDashboard(true);
+    } catch (err) {
+      flash(apiErrorMessage(err, 'That action could not be completed.'), true);
+      await loadDashboard(true); // resync — the server is the source of truth
+    } finally {
+      setBusyAction(null);
+    }
   };
 
-  const handleClaimBooking = async (b: any) => {
-    setClaimingBookingId(b._id);
+  const handleToggleAccepting = async () => {
+    const next = !acceptingBookings;
+    setAcceptingBookings(next); // optimistic
     try {
-      const cust = b.customerId && typeof b.customerId === 'object' ? b.customerId : null;
-      const customerName = cust?.name || 'Valued Client';
-      const serviceName = b.serviceSnapshot?.name || 'Grooming Service';
+      const updated = await barbersApi.setAcceptingBookings(next);
+      setAcceptingBookings(updated.autoAllocationEnabled);
+      flash(next ? 'You are now visible to customers.' : 'You are hidden from new customers.');
+    } catch (err) {
+      setAcceptingBookings(!next); // revert
+      flash(apiErrorMessage(err, 'Could not update your availability.'), true);
+    }
+  };
 
-      const claimedAssignment: Assignment = {
-        _id: `assign-${Date.now()}`,
-        bookingId: {
-          _id: b._id,
-          bookingNumber: b.bookingNumber || `BK-${b._id?.slice(-6)}`,
-          customerId: cust || {
-            _id: `u-${b._id}`,
-            name: customerName,
-            phone: cust?.phone || '+91 98765 43210',
-            email: cust?.email || 'customer@example.com',
-          },
-          serviceId: b.serviceId,
-          serviceSnapshot: b.serviceSnapshot || {
-            name: serviceName,
-            price: b.serviceSnapshot?.price || 399,
-            durationMinutes: b.serviceSnapshot?.durationMinutes || 45,
-          },
-          addressSnapshot: b.addressSnapshot || {
-            formattedAddress: b.addressSnapshot?.formattedAddress || 'Brahmapur Doorstep Address',
-            contactPhone: cust?.phone || '+91 98765 43210',
-          },
-          scheduledDate: b.scheduledDate || new Date().toISOString().split('T')[0],
-          startTime: b.startTime || '14:00',
-          endTime: b.endTime || '15:00',
-          customerLocation: b.customerLocation || {
-            type: 'Point',
-            coordinates: [longitude || 84.808, latitude || 19.3068],
-          },
-          status: 'ACCEPTED',
-          createdAt: b.createdAt || new Date().toISOString(),
-        } as any,
-        barberId: profile?._id || 'b-1',
-        status: 'ACCEPTED',
-        offeredAt: new Date().toISOString(),
-        expiresAt: new Date(Date.now() + 300000).toISOString(),
-      };
+  const handleUpdateLocation = () =>
+    runAction('location', async () => {
+      await barbersApi.updateLocation(latitude, longitude);
+      return 'Location updated.';
+    });
 
-      try {
-        if (profile?._id) {
-          await adminApi.manualAssign(b._id, profile._id);
-        }
-      } catch {}
-
-      setActiveAssignment(claimedAssignment);
-      setStatusMessage(`✅ You claimed booking #${b.bookingNumber} for ${serviceName}! Direct doorstep GPS activated.`);
-      await refreshDashboard();
-      await fetchOpenBookings();
-    } catch {
-      setStatusMessage('Booking claimed! Proceed to client doorstep.');
+  const handleClaim = async (booking: Booking) => {
+    setClaimingBookingId(booking._id);
+    try {
+      await barbersApi.claimBooking(booking._id);
+      flash(`Booking #${booking.bookingNumber} is yours. Customer details unlocked.`);
+      await loadDashboard(true);
+    } catch (err) {
+      // A rival barber or an admin may have taken it a moment ago — refresh the
+      // pool so the stale card disappears rather than sitting there unclaimable.
+      flash(apiErrorMessage(err, 'Could not claim this booking.'), true);
+      await loadDashboard(true);
     } finally {
       setClaimingBookingId(null);
-      setTimeout(() => setStatusMessage(null), 3500);
     }
   };
 
-  const handleToggleAuto = async () => {
-    const nextVal = !autoAllocation;
-    setAutoAllocation(nextVal);
-    try {
-      await barbersApi.toggleAutoAllocation(nextVal);
-      setStatusMessage(`Auto-Allocation turned ${nextVal ? 'ON' : 'OFF'}`);
-    } catch {
-      setStatusMessage(`Auto-Allocation status updated`);
-    }
-  };
-
-  const handleUpdateLocation = async () => {
-    try {
-      await barbersApi.updateLocation(latitude, longitude);
-      setStatusMessage('GPS Location coordinates updated successfully');
-    } catch {
-      setStatusMessage('GPS Location updated');
-    }
-  };
-
-  const handleAcceptAssignment = async () => {
-    if (!pendingAssignment) return;
-    try {
-      if (pendingAssignment._id.startsWith('assign-')) {
-        // Simulated assignment
-        setActiveAssignment({
-          ...pendingAssignment,
-          status: 'ACCEPTED',
-        });
-        setPendingAssignment(null);
-        setStatusMessage('Job accepted! Proceed to client doorstep.');
-        return;
-      }
-
-      const res = await assignmentApi.accept(pendingAssignment._id);
-      setActiveAssignment(res);
-      setPendingAssignment(null);
-      setStatusMessage('Job accepted! Proceed to client doorstep.');
-    } catch {
-      setActiveAssignment({
-        ...pendingAssignment,
-        status: 'ACCEPTED',
-      });
-      setPendingAssignment(null);
-    }
-  };
-
-  const handleRejectAssignment = () => {
-    setRejectModalOpen(true);
-  };
-
-  const handleRejectSubmit = async () => {
-    if (!pendingAssignment) return;
-    setRejecting(true);
-    try {
-      if (pendingAssignment._id.startsWith('assign-')) {
-        // Simulated offer - handle locally without invalid API call
-        setPendingAssignment(null);
-        setRejectModalOpen(false);
-        setRejectReason('');
-        setStatusMessage('Offer declined. Customer request returned to pool for other barbers.');
-        return;
-      }
-
+  const handleReject = () =>
+    runAction('reject', async () => {
       await assignmentApi.reject(
-        pendingAssignment._id,
+        activeAssignment!._id,
         rejectReason || 'Barber unavailable at the requested time',
       );
-      setPendingAssignment(null);
       setRejectModalOpen(false);
       setRejectReason('');
-      setStatusMessage('Booking request rejected. Customer booking is still active and reallocating to another barber.');
-      await refreshDashboard();
-    } catch (err: any) {
-      if (pendingAssignment._id.startsWith('assign-')) {
-        setPendingAssignment(null);
-        setRejectModalOpen(false);
-        setRejectReason('');
-        setStatusMessage('Simulated offer dismissed.');
-      } else {
-        setStatusMessage(err?.response?.data?.error?.message || 'Failed to reject request');
-      }
-    } finally {
-      setRejecting(false);
-      setTimeout(() => setStatusMessage(null), 3500);
-    }
-  };
+      return 'Offer declined. The booking is back in the open pool.';
+    });
 
-  const handleCancelActiveSubmit = async () => {
-    if (!activeAssignment) return;
-    setCancellingActive(true);
-    try {
-      if (activeAssignment._id.startsWith('assign-')) {
-        setActiveAssignment(null);
-        setCancelActiveModalOpen(false);
-        setCancelActiveReason('');
-        setOtpVerified(false);
-        setShowOtpForm(false);
-        setStatusMessage('Job cancelled by you. Customer booking remains active and reallocates to another barber.');
-        return;
-      }
-
+  const handleCancelJob = () =>
+    runAction('cancel', async () => {
       await assignmentApi.cancel(
-        activeAssignment._id,
-        cancelActiveReason || 'Barber cancelled service due to an emergency',
+        activeAssignment!._id,
+        cancelReason || 'Barber cancelled due to an emergency',
       );
-      setActiveAssignment(null);
-      setCancelActiveModalOpen(false);
-      setCancelActiveReason('');
-      setOtpVerified(false);
+      setCancelModalOpen(false);
+      setCancelReason('');
+      return 'Job cancelled. The booking has returned to the open pool.';
+    });
+
+  const handleVerifyOtp = async () => {
+    const otp = otpDigits.join('');
+    if (otp.length !== 6) {
+      setOtpError('Enter all 6 digits');
+      return;
+    }
+    const booking = bookingOf(activeAssignment);
+    if (!booking) return;
+
+    setOtpVerifying(true);
+    setOtpError(null);
+    try {
+      await bookingApi.verifyOtp(booking._id, otp);
       setShowOtpForm(false);
-      setStatusMessage('Job cancelled by you. Customer service request is still preserved and reallocating to another barber.');
-      await refreshDashboard();
-    } catch (err: any) {
-      if (activeAssignment._id.startsWith('assign-')) {
-        setActiveAssignment(null);
-        setCancelActiveModalOpen(false);
-        setCancelActiveReason('');
-        setStatusMessage('Job cancelled.');
-      } else {
-        setStatusMessage(err?.response?.data?.error?.message || 'Failed to cancel job');
-      }
+      setOtpDigits(['', '', '', '', '', '']);
+      flash('Code verified. The service is now in progress.');
+      await loadDashboard(true);
+    } catch (err) {
+      setOtpError(apiErrorMessage(err, 'Incorrect code. Please try again.'));
+      setOtpDigits(['', '', '', '', '', '']);
+      setTimeout(() => document.getElementById('otp-input-0')?.focus(), 100);
     } finally {
-      setCancellingActive(false);
-      setTimeout(() => setStatusMessage(null), 3500);
+      setOtpVerifying(false);
     }
   };
 
-  // ─── OTP digit input handler ─────────────────────────────────────────────────
-  const handleOtpChange = (index: number, value: string) => {
-    if (value.length > 1) value = value.slice(-1);
+  // ─── OTP input handlers ─────────────────────────────────────────────────────
+  const handleOtpChange = (index: number, raw: string) => {
+    const value = raw.slice(-1);
     if (value && !/^\d$/.test(value)) return;
-
-    const newDigits = [...otpDigits];
-    newDigits[index] = value;
-    setOtpDigits(newDigits);
+    const next = [...otpDigits];
+    next[index] = value;
+    setOtpDigits(next);
     setOtpError(null);
-
-    // Auto-focus next input
-    if (value && index < 5) {
-      const nextInput = document.getElementById(`otp-input-${index + 1}`);
-      nextInput?.focus();
-    }
+    if (value && index < 5) document.getElementById(`otp-input-${index + 1}`)?.focus();
   };
 
   const handleOtpKeyDown = (index: number, e: React.KeyboardEvent) => {
     if (e.key === 'Backspace' && !otpDigits[index] && index > 0) {
-      const prevInput = document.getElementById(`otp-input-${index - 1}`);
-      prevInput?.focus();
+      document.getElementById(`otp-input-${index - 1}`)?.focus();
     }
   };
 
@@ -469,292 +242,226 @@ export const BarberDashboard: React.FC<BarberDashboardProps> = ({ user }) => {
     }
   };
 
-  const handleVerifyOtp = async () => {
-    const otp = otpDigits.join('');
-    if (otp.length !== 6) {
-      setOtpError('Please enter all 6 digits');
-      return;
-    }
+  // ─── Derived ────────────────────────────────────────────────────────────────
+  const status = activeAssignment?.status;
+  const hasPendingOffer = status === 'OFFERED';
+  const hasLiveJob = !!status && IN_FLIGHT.includes(status);
+  const completedJobs = pastJobs.filter((j) => j.status === 'COMPLETED');
+  const earnings = completedJobs.reduce(
+    (sum, j) => sum + (bookingOf(j)?.serviceSnapshot?.price ?? 0),
+    0,
+  );
 
-    if (!activeAssignment) return;
-    setOtpVerifying(true);
-    setOtpError(null);
-
-    try {
-      const bId = typeof activeAssignment.bookingId === 'string' ? activeAssignment.bookingId : (activeAssignment.bookingId as any)._id;
-      await bookingApi.verifyOtp(bId, otp);
-      setOtpVerified(true);
-      setShowOtpForm(false);
-      setActiveAssignment({
-        ...activeAssignment,
-        status: 'IN_PROGRESS',
-      });
-      setStatusMessage('✅ OTP Verified! Service is now in progress.');
-    } catch (err: any) {
-      const msg = err?.response?.data?.error?.message || 'Invalid OTP. Please try again.';
-      setOtpError(msg);
-      setOtpDigits(['', '', '', '', '', '']);
-      // Focus first input
-      setTimeout(() => document.getElementById('otp-input-0')?.focus(), 100);
-    } finally {
-      setOtpVerifying(false);
-    }
-  };
-
-  const handleLifecycleAction = async (action: 'arrive' | 'start-otp' | 'complete') => {
-    if (!activeAssignment) return;
-
-    if (action === 'start-otp') {
-      setShowOtpForm(true);
-      setOtpDigits(['', '', '', '', '', '']);
-      setOtpError(null);
-      setOtpVerified(false);
-      setTimeout(() => document.getElementById('otp-input-0')?.focus(), 200);
-      return;
-    }
-
-    if (action === 'arrive') {
-      try {
-        await assignmentApi.arrive(activeAssignment._id);
-        setStatusMessage('📱 Arrived at customer home! Verification OTP dispatched to customer via Twilio SMS.');
-      } catch {
-        setStatusMessage('Arrived at customer location. Enter customer OTP to begin.');
-      }
-      setActiveAssignment({
-        ...activeAssignment,
-        status: 'ARRIVED',
-      });
-      setShowOtpForm(true);
-      setOtpDigits(['', '', '', '', '', '']);
-      setOtpError(null);
-      setTimeout(() => document.getElementById('otp-input-0')?.focus(), 300);
-      return;
-    }
-
-    if (action === 'complete') {
-      try {
-        await assignmentApi.complete(activeAssignment._id);
-      } catch {}
-      setActiveAssignment(null);
-      setOtpVerified(false);
-      setStatusMessage('Job completed successfully!');
-    }
-  };
+  if (loading) {
+    return (
+      <div className="py-24 text-center space-y-3">
+        <Loader2 className="w-8 h-8 text-[#ff6c4c] animate-spin mx-auto" />
+        <p className="text-xs text-gray-400">Loading your dashboard…</p>
+      </div>
+    );
+  }
 
   return (
     <div className="py-12 max-w-7xl mx-auto px-4 md:px-8 space-y-8">
-      
-      <div className="glass-card p-6 rounded-3xl border-purple-500/20 flex flex-col md:flex-row items-start md:items-center justify-between gap-6">
+
+      {/* ─── Header ──────────────────────────────────────────────────────────── */}
+      <div className="glass-card p-6 rounded-3xl border-[#ff6c4c]/20 flex flex-col md:flex-row items-start md:items-center justify-between gap-6">
         <div className="flex items-center gap-4">
-          <div className="w-16 h-16 rounded-2xl gradient-purple flex items-center justify-center font-bold text-2xl text-white shadow-xl shadow-purple-500/20">
-            {user?.name?.charAt(0) || 'B'}
+          <div className="w-16 h-16 rounded-2xl gradient-flow flex items-center justify-center font-bold text-2xl text-white shadow-xl shadow-[#ff6c4c]/20">
+            {user?.name?.charAt(0) ?? 'B'}
           </div>
           <div>
             <div className="flex items-center gap-2">
-              <h2 className="text-2xl font-extrabold font-outfit text-white">{user?.name || 'Barber Partner'}</h2>
-              <span className="px-2.5 py-0.5 rounded-full bg-purple-500/20 text-purple-300 text-xs border border-purple-500/30 flex items-center gap-1">
+              <h2 className="text-2xl font-extrabold font-outfit text-white">
+                {user?.name ?? 'Barber Partner'}
+              </h2>
+              <span className="px-2.5 py-0.5 rounded-full bg-[#ff6c4c]/20 text-[#ff8a6a] text-xs border border-[#ff6c4c]/30 flex items-center gap-1">
                 <ShieldCheck className="w-3.5 h-3.5" />
                 Verified Partner
               </span>
             </div>
             <p className="text-xs text-gray-400 mt-1">
-              Rating: {profile?.rating || 4.95} ★ • {profile?.totalCompletedJobs || 340} Completed Jobs
+              {profile
+                ? `${profile.rating.toFixed(2)} ★ • ${profile.totalCompletedJobs} completed jobs • ${profile.totalReviews} reviews`
+                : 'Profile unavailable'}
             </p>
           </div>
         </div>
 
         <div className="flex flex-wrap items-center gap-3">
           <button
-            onClick={refreshDashboard}
+            onClick={() => void loadDashboard()}
             disabled={refreshing}
-            className="px-4 py-3 rounded-2xl bg-purple-600 hover:bg-purple-500 text-white text-xs font-bold transition-all flex items-center gap-2 shadow-lg shadow-purple-600/25 active:scale-95"
+            className="px-4 py-3 rounded-2xl bg-[#13151f] hover:bg-[#1b1f2e] border border-white/[0.08] text-white text-xs font-bold transition-all flex items-center gap-2 active:scale-95"
           >
-            <RefreshCw className={`w-4 h-4 ${refreshing ? 'animate-spin' : ''}`} />
-            <span>Refresh Dashboard</span>
+            <RefreshCw className={`w-4 h-4 text-[#ff6c4c] ${refreshing ? 'animate-spin' : ''}`} />
+            <span>Refresh</span>
           </button>
 
-          <div className="flex items-center gap-4 bg-obsidian-800/80 p-2.5 rounded-2xl border border-white/10">
+          <div className="flex items-center gap-4 bg-[#13151f] p-2.5 rounded-2xl border border-white/[0.08]">
             <div>
-              <span className="text-xs font-bold text-white block">Direct Bookings</span>
-              <span className="text-[10px] text-gray-400">Available to clients</span>
+              <span className="text-xs font-bold text-white block">Accepting Bookings</span>
+              <span className="text-[10px] text-gray-400">
+                {acceptingBookings ? 'Visible to customers' : 'Hidden from customers'}
+              </span>
             </div>
-
-            <button onClick={handleToggleAuto} className="text-purple-400 hover:text-purple-300 transition-colors">
-              {autoAllocation ? (
-                <ToggleRight className="w-9 h-9 text-purple-500" />
-              ) : (
-                <ToggleLeft className="w-9 h-9 text-gray-600" />
-              )}
+            <button
+              onClick={handleToggleAccepting}
+              className="text-[#ff6c4c] hover:text-[#ff8a6a] transition-colors"
+              aria-label="Toggle accepting bookings"
+            >
+              {acceptingBookings
+                ? <ToggleRight className="w-9 h-9 text-[#ff6c4c]" />
+                : <ToggleLeft className="w-9 h-9 text-gray-600" />}
             </button>
           </div>
         </div>
       </div>
 
       {statusMessage && (
-        <div className="p-3.5 rounded-xl bg-purple-500/10 border border-purple-500/30 text-purple-300 text-xs flex items-center gap-2">
-          <CheckCircle2 className="w-4 h-4 text-purple-400" />
+        <div className="p-3.5 rounded-xl bg-emerald-500/10 border border-emerald-500/30 text-emerald-300 text-xs flex items-center gap-2">
+          <CheckCircle2 className="w-4 h-4" />
           <span>{statusMessage}</span>
         </div>
       )}
-
-      <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-        
-        <div className="glass-card p-6 rounded-3xl border-white/10 space-y-4">
-          <div className="flex items-center gap-2">
-            <MapPin className="w-5 h-5 text-purple-400" />
-            <h3 className="text-lg font-bold font-outfit text-white">Service Area Location</h3>
-          </div>
-          <p className="text-xs text-gray-400">
-            Set your current location coordinates to receive appointments in your vicinity.
-          </p>
-
-          <div className="grid grid-cols-2 gap-3">
-            <div>
-              <span className="text-[10px] text-gray-400 block mb-1">Latitude</span>
-              <input
-                type="number"
-                step="any"
-                value={latitude}
-                onChange={(e) => setLatitude(Number(e.target.value))}
-                className="w-full glass-input px-3 py-2 rounded-xl text-xs"
-              />
-            </div>
-            <div>
-              <span className="text-[10px] text-gray-400 block mb-1">Longitude</span>
-              <input
-                type="number"
-                step="any"
-                value={longitude}
-                onChange={(e) => setLongitude(Number(e.target.value))}
-                className="w-full glass-input px-3 py-2 rounded-xl text-xs"
-              />
-            </div>
-          </div>
-
-          <button
-            onClick={handleUpdateLocation}
-            className="w-full py-2.5 rounded-xl bg-obsidian-800 hover:bg-obsidian-700 text-xs font-semibold text-purple-300 border border-purple-500/30 transition-all flex items-center justify-center gap-2"
-          >
-            <Navigation className="w-4 h-4" />
-            Update Location
-          </button>
+      {errorMessage && (
+        <div className="p-3.5 rounded-xl bg-red-500/10 border border-red-500/30 text-red-300 text-xs flex items-center gap-2">
+          <AlertCircle className="w-4 h-4 shrink-0" />
+          <span>{errorMessage}</span>
         </div>
+      )}
 
-        <div className="glass-card p-6 rounded-3xl border-white/10 space-y-4">
-          <div className="flex items-center gap-2">
-            <Clock className="w-5 h-5 text-amber-400" />
-            <h3 className="text-lg font-bold font-outfit text-white">Dispatch Offer Simulator</h3>
-          </div>
-          <p className="text-xs text-gray-400">
-            Simulate receiving an auto-allocated incoming customer booking request.
-          </p>
-
-          <button
-            onClick={handleSimulateOffer}
-            className="w-full py-3 rounded-xl gradient-gold hover:opacity-95 text-black font-extrabold text-xs shadow-lg shadow-amber-500/20 flex items-center justify-center gap-2 active:scale-95 transition-all"
-          >
-            <Sparkles className="w-4 h-4" />
-            <span>⚡ Simulate Incoming Customer Booking</span>
-          </button>
+      {/* ─── Location ────────────────────────────────────────────────────────── */}
+      <div className="glass-card p-6 rounded-3xl border-white/10 space-y-4 max-w-xl">
+        <div className="flex items-center gap-2">
+          <MapPin className="w-5 h-5 text-[#ff6c4c]" />
+          <h3 className="text-lg font-bold font-outfit text-white">Service Area Location</h3>
         </div>
-
+        <p className="text-xs text-gray-400">
+          Customers searching nearby are matched against these coordinates.
+        </p>
+        <div className="grid grid-cols-2 gap-3">
+          <div>
+            <span className="text-[10px] text-gray-400 block mb-1">Latitude</span>
+            <input
+              type="number" step="any" value={latitude}
+              onChange={(e) => setLatitude(Number(e.target.value))}
+              className="w-full glass-input px-3 py-2 rounded-xl text-xs"
+            />
+          </div>
+          <div>
+            <span className="text-[10px] text-gray-400 block mb-1">Longitude</span>
+            <input
+              type="number" step="any" value={longitude}
+              onChange={(e) => setLongitude(Number(e.target.value))}
+              className="w-full glass-input px-3 py-2 rounded-xl text-xs"
+            />
+          </div>
+        </div>
+        <button
+          onClick={handleUpdateLocation}
+          disabled={busyAction === 'location'}
+          className="w-full py-2.5 rounded-xl bg-[#13151f] hover:bg-[#1b1f2e] text-xs font-semibold text-[#ff8a6a] border border-[#ff6c4c]/30 transition-all flex items-center justify-center gap-2"
+        >
+          <Navigation className="w-4 h-4" />
+          {busyAction === 'location' ? 'Saving…' : 'Update Location'}
+        </button>
       </div>
 
-      {/* ─── Open Customer Bookings Pool (Pending / Awaiting Barber) ───────────── */}
-      <div className="glass-card p-6 md:p-8 rounded-3xl border-amber-500/30 bg-gradient-to-br from-amber-950/20 via-obsidian-900 to-obsidian-900 space-y-6 shadow-2xl">
+      {/* ─── Open pool ───────────────────────────────────────────────────────── */}
+      <div className="glass-card p-6 md:p-8 rounded-3xl border-[#ff6c4c]/30 space-y-6 shadow-2xl">
         <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4 pb-4 border-b border-white/10">
           <div className="flex items-center gap-3">
-            <div className="w-10 h-10 rounded-2xl gradient-gold flex items-center justify-center text-black font-extrabold text-lg shadow-lg shadow-amber-500/20">
-              ⚡
+            <div className="w-10 h-10 rounded-2xl gradient-flow flex items-center justify-center text-white shadow-lg shadow-[#ff6c4c]/20">
+              <Inbox className="w-5 h-5" />
             </div>
             <div>
               <div className="flex items-center gap-2">
                 <h3 className="text-xl font-extrabold font-outfit text-white">
-                  Available Customer Requests Pool
+                  Available Customer Requests
                 </h3>
-                <span className="px-2.5 py-0.5 rounded-full bg-amber-500/20 text-amber-300 text-[10px] font-bold border border-amber-500/30">
-                  {openBookings.length} Awaiting Partner
+                <span className="px-2.5 py-0.5 rounded-full bg-[#ff6c4c]/20 text-[#ff8a6a] text-[10px] font-bold border border-[#ff6c4c]/30">
+                  {openBookings.length} waiting
                 </span>
               </div>
               <p className="text-xs text-gray-400 mt-0.5">
-                Pending & unassigned customer bookings looking for a doorstep barber in your area
+                Unassigned bookings — first to claim gets the job
               </p>
             </div>
           </div>
-
-          <button
-            onClick={fetchOpenBookings}
-            className="px-3.5 py-2 rounded-xl bg-obsidian-800 hover:bg-obsidian-700 text-gray-300 border border-white/10 text-xs font-bold flex items-center gap-1.5 transition-all"
-          >
-            <RefreshCw className="w-3.5 h-3.5 text-amber-400" />
-            <span>Refresh Requests</span>
-          </button>
         </div>
 
         {openBookings.length === 0 ? (
-          <div className="p-8 rounded-2xl bg-obsidian-800/60 border border-white/5 text-center space-y-2">
+          <div className="p-8 rounded-2xl bg-[#13151f]/60 border border-white/5 text-center space-y-2">
             <CheckCircle2 className="w-8 h-8 text-emerald-400 mx-auto" />
-            <h4 className="font-bold text-white text-sm">No Pending Requests in Pool</h4>
+            <h4 className="font-bold text-white text-sm">No Requests Waiting</h4>
             <p className="text-xs text-gray-400">
-              All live customer bookings are currently claimed or assigned. Click "Simulate Incoming Customer Booking" to test an incoming offer!
+              Every current booking has a barber. New customer requests appear here automatically.
             </p>
           </div>
         ) : (
           <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
             {openBookings.map((b) => {
-              const cust = (b.customerId && typeof b.customerId === 'object' ? b.customerId : null) as any;
-              const customerName = cust?.name || 'Customer';
-              const serviceName = b.serviceSnapshot?.name || 'Grooming Service';
-              const price = b.serviceSnapshot?.price || 399;
-              const duration = b.serviceSnapshot?.durationMinutes || 45;
-              const address = b.addressSnapshot?.formattedAddress || 'Brahmapur Doorstep Address';
+              const customer = typeof b.customerId === 'object' ? b.customerId : null;
+              const blocked = hasLiveJob || hasPendingOffer;
+              const claiming = claimingBookingId === b._id;
 
               return (
                 <div
                   key={b._id}
-                  className="bg-obsidian-800/90 p-5 rounded-2xl border border-white/10 hover:border-amber-500/40 transition-all space-y-4 shadow-lg flex flex-col justify-between"
+                  className="bg-[#13151f]/90 p-5 rounded-2xl border border-white/10 hover:border-[#ff6c4c]/40 transition-all space-y-4 shadow-lg flex flex-col justify-between"
                 >
                   <div className="space-y-3">
                     <div className="flex items-start justify-between gap-2 pb-2 border-b border-white/5">
-                      <div>
-                        <span className="font-bold text-white text-sm block">{customerName}</span>
+                      <div className="min-w-0">
+                        <span className="font-bold text-white text-sm block truncate">
+                          {customer?.name ?? 'Customer'}
+                        </span>
                         <span className="text-[10px] text-gray-400 font-mono">#{b.bookingNumber}</span>
                       </div>
-                      <div className="text-right">
-                        <span className="text-amber-400 font-extrabold text-base block">₹{price}</span>
-                        <span className="text-[10px] text-gray-400">{duration} mins</span>
+                      <div className="text-right shrink-0">
+                        <span className="text-[#ff8a6a] font-extrabold text-base block">
+                          ₹{b.serviceSnapshot.price}
+                        </span>
+                        <span className="text-[10px] text-gray-400">
+                          {b.serviceSnapshot.durationMinutes} mins
+                        </span>
                       </div>
                     </div>
 
-                    <div className="space-y-1.5 text-xs text-gray-300">
-                      <div className="font-semibold text-purple-300 flex items-center gap-1.5">
+                    <div className="space-y-1.5 text-xs">
+                      <div className="font-semibold text-[#ff8a6a] flex items-center gap-1.5">
                         <Scissors className="w-3.5 h-3.5" />
-                        <span>{serviceName}</span>
+                        <span>{b.serviceSnapshot.name}</span>
                       </div>
                       <div className="text-gray-400 text-[11px] flex items-center gap-1.5">
-                        <Clock className="w-3.5 h-3.5 text-amber-400" />
+                        <Clock className="w-3.5 h-3.5 text-[#ff6c4c]" />
                         <span>{b.scheduledDate} at {b.startTime}</span>
                       </div>
                       <div className="text-gray-400 text-[11px] flex items-start gap-1.5 pt-0.5">
-                        <MapPin className="w-3.5 h-3.5 text-purple-400 shrink-0 mt-0.5" />
-                        <span className="line-clamp-2">{address}</span>
+                        <MapPin className="w-3.5 h-3.5 text-[#ff6c4c] shrink-0 mt-0.5" />
+                        <span className="line-clamp-2">
+                          {b.addressSnapshot?.formattedAddress ?? 'Address shared after claiming'}
+                        </span>
                       </div>
                     </div>
                   </div>
 
                   <button
-                    onClick={() => handleClaimBooking(b)}
-                    disabled={claimingBookingId === b._id || !!activeAssignment}
-                    className={`w-full py-2.5 rounded-xl text-xs font-bold transition-all flex items-center justify-center gap-2 shadow-md ${
-                      activeAssignment
+                    onClick={() => void handleClaim(b)}
+                    disabled={blocked || claiming}
+                    className={`w-full py-2.5 rounded-xl text-xs font-bold transition-all flex items-center justify-center gap-2 ${
+                      blocked
                         ? 'bg-white/5 text-gray-500 cursor-not-allowed border border-white/5'
-                        : claimingBookingId === b._id
-                        ? 'bg-amber-500/30 text-amber-300 cursor-wait'
-                        : 'gradient-gold hover:opacity-95 text-black font-extrabold shadow-amber-500/20 active:scale-95'
+                        : claiming
+                          ? 'bg-[#ff6c4c]/30 text-[#ff8a6a] cursor-wait'
+                          : 'gradient-flow text-white font-extrabold shadow-md shadow-[#ff6c4c]/20 active:scale-95'
                     }`}
                   >
                     <Sparkles className="w-3.5 h-3.5" />
-                    <span>{activeAssignment ? 'Complete Active Job First' : claimingBookingId === b._id ? 'Claiming Job...' : '⚡ Accept & Claim Job'}</span>
+                    <span>
+                      {blocked ? 'Finish your current job first' : claiming ? 'Claiming…' : 'Accept & Claim Job'}
+                    </span>
                   </button>
                 </div>
               );
@@ -763,334 +470,404 @@ export const BarberDashboard: React.FC<BarberDashboardProps> = ({ user }) => {
         )}
       </div>
 
-      {/* ─── Active Job with Customer Details & OTP Verification ──────────────────── */}
-      {activeAssignment && (() => {
-        const booking = typeof activeAssignment.bookingId === 'object' ? (activeAssignment.bookingId as any) : null;
-        const customer = booking?.customerId && typeof booking.customerId === 'object' ? booking.customerId : null;
-        const customerName = customer?.name || 'Valued Customer';
-        const customerPhone = booking?.addressSnapshot?.contactPhone || customer?.phone || '+91 98765 43210';
-        const houseNo = booking?.addressSnapshot?.houseNumber || '';
-        const landmark = booking?.addressSnapshot?.landmark || '';
-        const coords = booking?.customerLocation?.coordinates || [longitude, latitude];
-        const formattedAddr = booking?.addressSnapshot?.formattedAddress || `GPS Coordinates: ${coords[1]?.toFixed(5)}, ${coords[0]?.toFixed(5)}`;
-        const googleMapsUrl = `https://www.google.com/maps/dir/?api=1&destination=${coords[1]},${coords[0]}`;
-        const serviceName = booking?.serviceSnapshot?.name || 'Haircut & Styling';
-        const price = booking?.serviceSnapshot?.price || 399;
-        const scheduledTime = booking ? `${booking.scheduledDate} at ${booking.startTime}` : 'Today at 14:00';
-        const bookingNumber = booking?.bookingNumber || 'BK-ACTIVE';
+      {/* ─── Pending offer (customer chose this barber) ──────────────────────── */}
+      {hasPendingOffer && activeAssignment && (() => {
+        const booking = bookingOf(activeAssignment);
+        const customer = booking && typeof booking.customerId === 'object' ? booking.customerId : null;
 
         return (
-          <div className="glass-card p-6 md:p-8 rounded-3xl border-purple-500/40 bg-gradient-to-br from-purple-950/30 via-obsidian-900 to-obsidian-900 space-y-6 shadow-2xl">
-            {/* Header with Job Status */}
-            <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4 pb-4 border-b border-white/10">
-              <div className="flex items-center gap-3">
-                <span className="w-3.5 h-3.5 rounded-full bg-emerald-400 animate-ping"></span>
+          <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/85 backdrop-blur-md">
+            <div className="glass-card rounded-3xl p-6 md:p-8 w-full max-w-md border-[#ff6c4c]/40 space-y-6 text-center shadow-2xl">
+              <div className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full bg-[#ff6c4c]/20 text-[#ff8a6a] text-xs font-bold border border-[#ff6c4c]/30">
+                <Clock className="w-3.5 h-3.5" />
+                <span>Direct Booking Request</span>
+              </div>
+
+              <div>
+                <h3 className="text-xl font-extrabold font-outfit text-white">
+                  A customer chose you
+                </h3>
+                {booking && (
+                  <>
+                    <p className="text-xs text-[#ff8a6a] font-semibold mt-1">
+                      {booking.serviceSnapshot.name} • ₹{booking.serviceSnapshot.price} ({booking.serviceSnapshot.durationMinutes} mins)
+                    </p>
+                    <p className="text-[11px] text-gray-400 mt-1">
+                      Scheduled for {booking.scheduledDate} at {booking.startTime}
+                    </p>
+                  </>
+                )}
+              </div>
+
+              <div className="bg-[#13151f]/90 p-4 rounded-2xl border border-white/10 text-left space-y-3 text-xs">
                 <div>
-                  <h3 className="text-xl font-extrabold font-outfit text-white flex items-center gap-2">
-                    Active Service Job <span className="text-purple-400 text-sm font-mono font-normal">#{bookingNumber}</span>
-                  </h3>
-                  <span className="text-xs text-gray-400">Accepted by you • Customer details & doorstep GPS unlocked</span>
+                  <span className="text-[10px] text-gray-400 uppercase font-semibold block">Client</span>
+                  <span className="font-bold text-white text-sm">{customer?.name ?? 'Customer'}</span>
+                </div>
+                <div>
+                  <span className="text-[10px] text-gray-400 uppercase font-semibold flex items-center gap-1">
+                    <MapPin className="w-3 h-3 text-[#ff6c4c]" />
+                    Doorstep Address
+                  </span>
+                  <span className="text-gray-300 leading-relaxed block mt-0.5">
+                    {booking?.addressSnapshot?.formattedAddress ?? 'Full address unlocks on accept'}
+                  </span>
                 </div>
               </div>
-              <span className="px-3.5 py-1 rounded-full bg-purple-500/20 border border-purple-500/40 text-purple-300 text-xs font-bold uppercase tracking-wider">
-                Status: {activeAssignment.status}
+
+              <div className="grid grid-cols-2 gap-3 pt-2">
+                <button
+                  onClick={() => setRejectModalOpen(true)}
+                  className="py-3 rounded-xl bg-red-500/10 hover:bg-red-500/20 text-red-300 text-xs font-bold border border-red-500/30 transition-all flex items-center justify-center gap-1.5"
+                >
+                  <XCircle className="w-4 h-4" /> Decline
+                </button>
+                <button
+                  onClick={() => void runAction('accept', async () => {
+                    await assignmentApi.accept(activeAssignment._id);
+                    return 'Job accepted. Head to the customer.';
+                  })}
+                  disabled={busyAction === 'accept'}
+                  className="py-3 rounded-xl gradient-flow text-white text-xs font-extrabold shadow-lg shadow-[#ff6c4c]/30 flex items-center justify-center gap-1.5 active:scale-95"
+                >
+                  {busyAction === 'accept'
+                    ? <Loader2 className="w-4 h-4 animate-spin" />
+                    : <CheckCircle2 className="w-4 h-4" />}
+                  Accept Job
+                </button>
+              </div>
+            </div>
+          </div>
+        );
+      })()}
+
+      {/* ─── Active job ──────────────────────────────────────────────────────── */}
+      {hasLiveJob && activeAssignment && (() => {
+        const booking = bookingOf(activeAssignment);
+        const customer = booking && typeof booking.customerId === 'object' ? booking.customerId : null;
+        const phone = booking?.addressSnapshot?.contactPhone ?? customer?.phone ?? '';
+        const coords = booking?.customerLocation?.coordinates;
+        const mapsUrl = coords
+          ? `https://www.google.com/maps/dir/?api=1&destination=${coords[1]},${coords[0]}`
+          : null;
+
+        return (
+          <div className="glass-card p-6 md:p-8 rounded-3xl border-[#ff6c4c]/40 space-y-6 shadow-2xl">
+            <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4 pb-4 border-b border-white/10">
+              <div className="flex items-center gap-3">
+                <span className="w-3.5 h-3.5 rounded-full bg-emerald-400 animate-pulse" />
+                <div>
+                  <h3 className="text-xl font-extrabold font-outfit text-white flex items-center gap-2">
+                    Active Job
+                    <span className="text-[#ff8a6a] text-sm font-mono font-normal">
+                      #{booking?.bookingNumber}
+                    </span>
+                  </h3>
+                  <span className="text-xs text-gray-400">
+                    Customer details and doorstep navigation unlocked
+                  </span>
+                </div>
+              </div>
+              <span className="px-3.5 py-1 rounded-full bg-[#ff6c4c]/20 border border-[#ff6c4c]/40 text-[#ff8a6a] text-xs font-bold uppercase tracking-wider">
+                {activeAssignment.status.replace(/_/g, ' ')}
               </span>
             </div>
 
-            {/* Customer & Location Details Card */}
-            <div className="grid grid-cols-1 lg:grid-cols-2 gap-6 bg-obsidian-800/80 p-5 rounded-2xl border border-white/10">
-              {/* Left Column: Customer Profile */}
+            <div className="grid grid-cols-1 lg:grid-cols-2 gap-6 bg-[#13151f]/80 p-5 rounded-2xl border border-white/10">
               <div className="space-y-4">
                 <div className="flex items-center gap-3.5">
-                  <div className="w-12 h-12 rounded-2xl gradient-purple flex items-center justify-center text-white font-bold text-lg shadow-md">
-                    {customerName.charAt(0)}
+                  <div className="w-12 h-12 rounded-2xl gradient-flow flex items-center justify-center text-white font-bold text-lg shadow-md">
+                    {(customer?.name ?? 'C').charAt(0)}
                   </div>
                   <div>
-                    <span className="text-[10px] text-gray-400 uppercase font-semibold tracking-wider block">Customer Contact</span>
-                    <h4 className="text-base font-bold text-white flex items-center gap-2">
-                      {customerName}
-                    </h4>
-                    {customerPhone && (
-                      <div className="flex items-center gap-2 mt-1">
-                        <a
-                          href={`tel:${customerPhone.replace(/\s+/g, '')}`}
-                          className="px-3 py-1 rounded-xl bg-purple-600/30 hover:bg-purple-600/60 text-purple-200 hover:text-white border border-purple-500/40 text-xs font-bold flex items-center gap-1.5 transition-all shadow-sm"
-                        >
-                          <Phone className="w-3.5 h-3.5 text-purple-400" />
-                          <span>Call {customerPhone}</span>
-                        </a>
-                      </div>
+                    <span className="text-[10px] text-gray-400 uppercase font-semibold tracking-wider block">
+                      Customer
+                    </span>
+                    <h4 className="text-base font-bold text-white">{customer?.name ?? 'Customer'}</h4>
+                    {phone && (
+                      <a
+                        href={`tel:${phone.replace(/\s+/g, '')}`}
+                        className="inline-flex mt-1 px-3 py-1 rounded-xl bg-[#ff6c4c]/20 hover:bg-[#ff6c4c]/40 text-[#ff8a6a] hover:text-white border border-[#ff6c4c]/40 text-xs font-bold items-center gap-1.5 transition-all"
+                      >
+                        <Phone className="w-3.5 h-3.5" />
+                        <span>Call {phone}</span>
+                      </a>
                     )}
                   </div>
                 </div>
 
-                <div className="pt-2 border-t border-white/5 space-y-1">
-                  <span className="text-[10px] text-gray-400 uppercase font-semibold tracking-wider block">Service Requested</span>
-                  <div className="flex items-center justify-between text-xs">
-                    <span className="font-bold text-white">{serviceName}</span>
-                    <span className="text-amber-400 font-extrabold text-sm">₹{price}</span>
+                {booking && (
+                  <div className="pt-2 border-t border-white/5 space-y-1">
+                    <span className="text-[10px] text-gray-400 uppercase font-semibold tracking-wider block">
+                      Service
+                    </span>
+                    <div className="flex items-center justify-between text-xs">
+                      <span className="font-bold text-white">{booking.serviceSnapshot.name}</span>
+                      <span className="text-[#ff8a6a] font-extrabold text-sm">
+                        ₹{booking.serviceSnapshot.price}
+                      </span>
+                    </div>
+                    <div className="flex items-center gap-1 text-[11px] text-gray-400">
+                      <Calendar className="w-3 h-3 text-[#ff6c4c]" />
+                      <span>{booking.scheduledDate} at {booking.startTime}</span>
+                    </div>
                   </div>
-                  <div className="flex items-center gap-1 text-[11px] text-gray-400">
-                    <Calendar className="w-3 h-3 text-purple-400" />
-                    <span>{scheduledTime}</span>
-                  </div>
-                </div>
+                )}
               </div>
 
-              {/* Right Column: Doorstep Address & Navigation */}
               <div className="space-y-3.5 flex flex-col justify-between border-t lg:border-t-0 lg:border-l border-white/10 lg:pl-6 pt-4 lg:pt-0">
                 <div>
                   <span className="text-[10px] text-gray-400 uppercase font-semibold tracking-wider mb-1 flex items-center gap-1">
-                    <MapPin className="w-3.5 h-3.5 text-purple-400" />
-                    Complete Doorstep Delivery Address
+                    <MapPin className="w-3.5 h-3.5 text-[#ff6c4c]" />
+                    Doorstep Address
                   </span>
-                  <div className="text-xs text-gray-200 leading-relaxed font-medium bg-black/30 p-3 rounded-xl border border-white/5 space-y-1">
-                    {houseNo && (
-                      <span className="block font-bold text-purple-300">🏠 {houseNo}</span>
+                  <div className="text-xs text-gray-200 leading-relaxed bg-black/30 p-3 rounded-xl border border-white/5 space-y-1">
+                    {booking?.addressSnapshot?.houseNumber && (
+                      <span className="block font-bold text-[#ff8a6a]">
+                        🏠 {booking.addressSnapshot.houseNumber}
+                      </span>
                     )}
-                    {landmark && (
-                      <span className="block text-gray-400 text-[11px]">📍 Landmark: {landmark}</span>
+                    {booking?.addressSnapshot?.landmark && (
+                      <span className="block text-gray-400 text-[11px]">
+                        📍 {booking.addressSnapshot.landmark}
+                      </span>
                     )}
-                    <p className="text-gray-300 text-[11px]">{formattedAddr}</p>
+                    <p className="text-gray-300 text-[11px]">
+                      {booking?.addressSnapshot?.formattedAddress
+                        ?? (coords ? `GPS: ${coords[1].toFixed(5)}, ${coords[0].toFixed(5)}` : 'Address unavailable')}
+                    </p>
                   </div>
                 </div>
 
-                <a
-                  href={googleMapsUrl}
-                  target="_blank"
-                  rel="noopener noreferrer"
-                  className="w-full py-2.5 px-4 rounded-xl bg-purple-600/30 hover:bg-purple-600/50 border border-purple-500/40 text-purple-200 hover:text-white text-xs font-bold flex items-center justify-center gap-2 transition-all shadow-sm"
-                >
-                  <Navigation className="w-4 h-4 text-purple-400" />
-                  <span>Open in Google Maps (Turn-by-Turn GPS)</span>
-                  <ExternalLink className="w-3 h-3 opacity-70" />
-                </a>
+                {mapsUrl && (
+                  <a
+                    href={mapsUrl} target="_blank" rel="noopener noreferrer"
+                    className="w-full py-2.5 px-4 rounded-xl bg-[#ff6c4c]/20 hover:bg-[#ff6c4c]/40 border border-[#ff6c4c]/40 text-[#ff8a6a] hover:text-white text-xs font-bold flex items-center justify-center gap-2 transition-all"
+                  >
+                    <Navigation className="w-4 h-4" />
+                    <span>Open in Google Maps</span>
+                    <ExternalLink className="w-3 h-3 opacity-70" />
+                  </a>
+                )}
               </div>
             </div>
 
-            {/* Step Action Buttons */}
-            <div className="grid grid-cols-1 md:grid-cols-3 gap-3 pt-2">
-              {/* Step 1: Arrived */}
+            {/* Lifecycle steps — enabled strictly by the server-side status */}
+            <div className="grid grid-cols-1 md:grid-cols-4 gap-3 pt-2">
               <button
-                onClick={() => handleLifecycleAction('arrive')}
-                disabled={activeAssignment.status !== 'ACCEPTED'}
+                onClick={() => void runAction('journey', async () => {
+                  await assignmentApi.startJourney(activeAssignment._id);
+                  return 'Journey started.';
+                })}
+                disabled={status !== 'ACCEPTED' || busyAction === 'journey'}
                 className={`py-3.5 rounded-2xl text-xs font-bold border transition-all flex items-center justify-center gap-2 ${
-                  activeAssignment.status === 'ACCEPTED'
-                    ? 'bg-amber-500/20 border-amber-500/40 text-amber-300 hover:bg-amber-500 hover:text-black shadow-lg shadow-amber-500/10'
+                  status === 'ACCEPTED'
+                    ? 'bg-[#ff6c4c]/20 border-[#ff6c4c]/40 text-[#ff8a6a] hover:bg-[#ff6c4c] hover:text-white'
                     : 'bg-white/5 border-white/10 text-gray-500 cursor-not-allowed'
                 }`}
               >
-                <Navigation className="w-4 h-4" />
-                1. Arrived at Doorstep
+                <Navigation className="w-4 h-4" /> 1. On My Way
               </button>
 
-              {/* Step 2: Enter OTP */}
               <button
-                onClick={() => handleLifecycleAction('start-otp')}
-                disabled={activeAssignment.status !== 'ARRIVED' || otpVerified}
+                onClick={() => void runAction('arrive', async () => {
+                  await assignmentApi.arrive(activeAssignment._id);
+                  return 'Arrival recorded. Verification code sent to the customer.';
+                })}
+                disabled={!(status === 'ACCEPTED' || status === 'EN_ROUTE') || busyAction === 'arrive'}
                 className={`py-3.5 rounded-2xl text-xs font-bold border transition-all flex items-center justify-center gap-2 ${
-                  activeAssignment.status === 'ARRIVED' && !otpVerified
-                    ? 'bg-purple-500/30 border-purple-500/50 text-purple-300 hover:bg-purple-500 hover:text-white animate-pulse shadow-lg shadow-purple-500/20'
-                    : otpVerified
-                    ? 'bg-green-500/20 border-green-500/40 text-green-300 cursor-default'
+                  status === 'ACCEPTED' || status === 'EN_ROUTE'
+                    ? 'bg-[#ff6c4c]/20 border-[#ff6c4c]/40 text-[#ff8a6a] hover:bg-[#ff6c4c] hover:text-white'
                     : 'bg-white/5 border-white/10 text-gray-500 cursor-not-allowed'
+                }`}
+              >
+                <MapPin className="w-4 h-4" /> 2. Arrived
+              </button>
+
+              <button
+                onClick={() => {
+                  setShowOtpForm(true);
+                  setOtpDigits(['', '', '', '', '', '']);
+                  setOtpError(null);
+                  setTimeout(() => document.getElementById('otp-input-0')?.focus(), 150);
+                }}
+                disabled={status !== 'ARRIVED'}
+                className={`py-3.5 rounded-2xl text-xs font-bold border transition-all flex items-center justify-center gap-2 ${
+                  status === 'ARRIVED'
+                    ? 'bg-[#ff6c4c]/30 border-[#ff6c4c]/50 text-[#ff8a6a] hover:bg-[#ff6c4c] hover:text-white animate-pulse'
+                    : status === 'IN_PROGRESS'
+                      ? 'bg-emerald-500/20 border-emerald-500/40 text-emerald-300 cursor-default'
+                      : 'bg-white/5 border-white/10 text-gray-500 cursor-not-allowed'
                 }`}
               >
                 <KeyRound className="w-4 h-4" />
-                {otpVerified ? '✅ OTP Verified' : '2. Enter Customer OTP'}
+                {status === 'IN_PROGRESS' ? 'Verified' : '3. Enter OTP'}
               </button>
 
-              {/* Step 3: Complete */}
               <button
-                onClick={() => handleLifecycleAction('complete')}
-                disabled={activeAssignment.status !== 'IN_PROGRESS'}
+                onClick={() => void runAction('complete', async () => {
+                  await assignmentApi.complete(activeAssignment._id);
+                  return 'Job completed.';
+                })}
+                disabled={status !== 'IN_PROGRESS' || busyAction === 'complete'}
                 className={`py-3.5 rounded-2xl text-xs font-bold border transition-all flex items-center justify-center gap-2 ${
-                  activeAssignment.status === 'IN_PROGRESS'
-                    ? 'bg-green-500/20 border-green-500/40 text-green-300 hover:bg-green-500 hover:text-black shadow-lg shadow-green-500/20'
+                  status === 'IN_PROGRESS'
+                    ? 'bg-emerald-500/20 border-emerald-500/40 text-emerald-300 hover:bg-emerald-500 hover:text-black'
                     : 'bg-white/5 border-white/10 text-gray-500 cursor-not-allowed'
                 }`}
               >
-                <CheckCircle2 className="w-4 h-4" />
-                3. Complete Job
+                <CheckCircle2 className="w-4 h-4" /> 4. Complete
               </button>
             </div>
 
-            {/* Barber Cancel Active Job Option */}
             <div className="flex items-center justify-between pt-2 border-t border-white/5">
-              <span className="text-[11px] text-gray-400">
-                Facing an emergency or transport breakdown?
-              </span>
+              <span className="text-[11px] text-gray-400">Emergency or transport breakdown?</span>
               <button
-                type="button"
-                onClick={() => setCancelActiveModalOpen(true)}
+                onClick={() => setCancelModalOpen(true)}
                 className="px-3 py-1.5 rounded-xl bg-red-500/10 hover:bg-red-500/20 text-red-300 border border-red-500/30 text-xs font-bold transition-all flex items-center gap-1.5"
               >
-                <XCircle className="w-3.5 h-3.5" />
-                Cancel Accepted Job
+                <XCircle className="w-3.5 h-3.5" /> Cancel Job
               </button>
             </div>
           </div>
         );
       })()}
 
-      {/* ─── OTP Entry Modal ───────────────────────────────────────────────────── */}
+      {/* ─── OTP modal ───────────────────────────────────────────────────────── */}
       {showOtpForm && (
         <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/85 backdrop-blur-md">
-          <div className="glass-card rounded-3xl p-8 w-full max-w-md border-purple-500/40 space-y-6 text-center shadow-2xl shadow-purple-500/20">
-            <div className="w-20 h-20 rounded-full bg-purple-500/20 border-2 border-purple-500/40 flex items-center justify-center mx-auto">
-              <KeyRound className="w-10 h-10 text-purple-400" />
+          <div className="glass-card rounded-3xl p-8 w-full max-w-md border-[#ff6c4c]/40 space-y-6 text-center shadow-2xl">
+            <div className="w-20 h-20 rounded-full bg-[#ff6c4c]/20 border-2 border-[#ff6c4c]/40 flex items-center justify-center mx-auto">
+              <KeyRound className="w-10 h-10 text-[#ff6c4c]" />
             </div>
-
             <div>
               <h3 className="text-xl font-bold font-outfit text-white">Enter Service OTP</h3>
               <p className="text-xs text-gray-400 mt-2 leading-relaxed">
-                Ask the customer for their <span className="text-purple-300 font-semibold">6-digit verification code</span> to start the service
+                Ask the customer for their{' '}
+                <span className="text-[#ff8a6a] font-semibold">6-digit verification code</span>
               </p>
             </div>
 
-            {/* 6-Digit OTP Input */}
             <div className="flex justify-center gap-2" onPaste={handleOtpPaste}>
               {otpDigits.map((digit, i) => (
                 <input
                   key={i}
                   id={`otp-input-${i}`}
-                  type="text"
-                  inputMode="numeric"
-                  maxLength={1}
-                  value={digit}
+                  type="text" inputMode="numeric" maxLength={1} value={digit}
                   onChange={(e) => handleOtpChange(i, e.target.value)}
                   onKeyDown={(e) => handleOtpKeyDown(i, e)}
-                  className={`w-12 h-14 rounded-xl text-center text-xl font-extrabold border-2 bg-obsidian-800/80 outline-none transition-all duration-200 ${
+                  className={`w-12 h-14 rounded-xl text-center text-xl font-extrabold border-2 bg-[#13151f] outline-none transition-all ${
                     otpError
-                      ? 'border-red-500/60 text-red-300 shake-animation'
+                      ? 'border-red-500/60 text-red-300'
                       : digit
-                      ? 'border-purple-500/60 text-purple-300 shadow-lg shadow-purple-500/10'
-                      : 'border-white/20 text-white hover:border-purple-500/40 focus:border-purple-500/60 focus:shadow-lg focus:shadow-purple-500/10'
+                        ? 'border-[#ff6c4c]/60 text-[#ff8a6a]'
+                        : 'border-white/20 text-white focus:border-[#ff6c4c]/60'
                   }`}
-                  autoFocus={i === 0}
                 />
               ))}
             </div>
 
             {otpError && (
               <div className="p-3 rounded-xl bg-red-500/10 border border-red-500/30 text-red-300 text-xs flex items-center gap-2">
-                <XCircle className="w-4 h-4 flex-shrink-0" />
+                <XCircle className="w-4 h-4 shrink-0" />
                 <span>{otpError}</span>
               </div>
             )}
 
             <div className="grid grid-cols-2 gap-3 pt-2">
               <button
-                onClick={() => {
-                  setShowOtpForm(false);
-                  setOtpDigits(['', '', '', '', '', '']);
-                  setOtpError(null);
-                }}
+                onClick={() => { setShowOtpForm(false); setOtpDigits(['', '', '', '', '', '']); setOtpError(null); }}
                 className="py-3 rounded-xl bg-white/5 hover:bg-white/10 text-gray-300 text-xs font-bold border border-white/10 transition-all"
               >
                 Cancel
               </button>
-
               <button
-                onClick={handleVerifyOtp}
+                onClick={() => void handleVerifyOtp()}
                 disabled={otpVerifying || otpDigits.some((d) => !d)}
                 className={`py-3 rounded-xl text-xs font-extrabold shadow-lg transition-all flex items-center justify-center gap-2 ${
                   otpVerifying || otpDigits.some((d) => !d)
-                    ? 'bg-purple-500/30 text-purple-400 cursor-not-allowed'
-                    : 'gradient-purple hover:opacity-95 text-white shadow-purple-500/30'
+                    ? 'bg-[#ff6c4c]/30 text-[#ff8a6a]/60 cursor-not-allowed'
+                    : 'gradient-flow text-white shadow-[#ff6c4c]/30'
                 }`}
               >
-                {otpVerifying ? (
-                  <>
-                    <Loader2 className="w-4 h-4 animate-spin" />
-                    Verifying...
-                  </>
-                ) : (
-                  <>
-                    <KeyRound className="w-4 h-4" />
-                    Verify OTP
-                  </>
-                )}
+                {otpVerifying
+                  ? <><Loader2 className="w-4 h-4 animate-spin" /> Verifying…</>
+                  : <><KeyRound className="w-4 h-4" /> Verify</>}
               </button>
             </div>
           </div>
         </div>
       )}
 
-      {/* ─── Incoming Job Request Modal with Full Customer & Address Details ────────── */}
-      {pendingAssignment && (() => {
-        const booking = typeof pendingAssignment.bookingId === 'object' ? (pendingAssignment.bookingId as any) : null;
-        const customer = booking?.customerId && typeof booking.customerId === 'object' ? booking.customerId : null;
-        const customerName = customer?.name || 'Valued Customer';
-        const serviceName = booking?.serviceSnapshot?.name || 'Executive Grooming Service';
-        const price = booking?.serviceSnapshot?.price || 399;
-        const duration = booking?.serviceSnapshot?.durationMinutes || 45;
-        const date = booking?.scheduledDate ? `${booking.scheduledDate} at ${booking.startTime}` : 'Requested Time';
-        const coords = booking?.customerLocation?.coordinates || [longitude, latitude];
-        const formattedAddr = booking?.addressSnapshot?.formattedAddress || `Coordinates: ${coords[1]?.toFixed(4)}, ${coords[0]?.toFixed(4)}`;
+      {/* ─── Decline / cancel modals ─────────────────────────────────────────── */}
+      {(rejectModalOpen || cancelModalOpen) && (() => {
+        const isReject = rejectModalOpen;
+        const reason = isReject ? rejectReason : cancelReason;
+        const setReason = isReject ? setRejectReason : setCancelReason;
+        const presets = isReject
+          ? ['Schedule conflict', 'Transport issue', 'Location too far', 'Personal emergency', 'Equipment unavailable']
+          : ['Transport issue', 'Medical emergency', 'Address unreachable', 'Equipment damage', 'Severe weather'];
+        const busy = busyAction === (isReject ? 'reject' : 'cancel');
 
         return (
-          <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/85 backdrop-blur-md animate-fade-in">
-            <div className="glass-card rounded-3xl p-6 md:p-8 w-full max-w-md border-amber-500/40 space-y-6 text-center shadow-2xl shadow-amber-500/20 relative">
-              {/* Close Button */}
-              <button
-                type="button"
-                onClick={() => {
-                  setPendingAssignment(null);
-                  setStatusMessage('Offer popup dismissed.');
-                  setTimeout(() => setStatusMessage(null), 3000);
-                }}
-                className="absolute top-4 right-4 p-2 rounded-xl bg-white/5 hover:bg-white/10 text-gray-400 hover:text-white transition-all border border-white/10"
-                title="Close"
-              >
-                <X className="w-5 h-5" />
-              </button>
-
-              <div className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full bg-amber-500/20 text-amber-300 text-xs font-bold border border-amber-500/30">
-                <Clock className="w-3.5 h-3.5" />
-                <span>New Booking Offer</span>
+          <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/85 backdrop-blur-md">
+            <div className="glass-card rounded-3xl p-6 md:p-8 w-full max-w-md border-red-500/40 space-y-5 text-left shadow-2xl">
+              <div className="flex items-center justify-between pb-3 border-b border-white/10">
+                <h3 className="text-lg font-bold text-white flex items-center gap-2">
+                  <XCircle className="w-5 h-5 text-red-400" />
+                  {isReject ? 'Decline Request' : 'Cancel Accepted Job'}
+                </h3>
+                <button
+                  onClick={() => { setRejectModalOpen(false); setCancelModalOpen(false); }}
+                  className="p-1 rounded-lg text-gray-400 hover:text-white"
+                >
+                  <X className="w-5 h-5" />
+                </button>
               </div>
 
-              <div>
-                <h3 className="text-xl font-extrabold font-outfit text-white">Incoming Client Request</h3>
-                <p className="text-xs text-purple-300 font-semibold mt-1">
-                  {serviceName} • <span className="text-amber-400 font-bold">₹{price}</span> ({duration} mins)
-                </p>
-                <p className="text-[11px] text-gray-400 mt-1">
-                  Scheduled for {date}
-                </p>
+              <div className="p-3 rounded-2xl bg-[#ff6c4c]/10 border border-[#ff6c4c]/30 text-[#ff8a6a] text-xs leading-relaxed">
+                This booking returns to the open pool so another barber — or the admin —
+                can take it. The customer keeps their appointment.
               </div>
 
-              {/* Customer & Address Preview */}
-              <div className="bg-obsidian-800/90 p-4 rounded-2xl border border-white/10 text-left space-y-3 text-xs">
-                <div>
-                  <span className="text-[10px] text-gray-400 uppercase font-semibold block">Client Name</span>
-                  <span className="font-bold text-white text-sm">{customerName}</span>
-                </div>
-                <div>
-                  <span className="text-[10px] text-gray-400 uppercase font-semibold block flex items-center gap-1">
-                    <MapPin className="w-3 h-3 text-purple-400" />
-                    Doorstep Delivery Address
-                  </span>
-                  <span className="text-gray-300 leading-relaxed block mt-0.5">{formattedAddr}</span>
-                </div>
+              <div className="flex flex-wrap gap-2">
+                {presets.map((preset) => (
+                  <button
+                    key={preset}
+                    onClick={() => setReason(preset)}
+                    className={`px-3 py-1.5 rounded-xl text-[11px] font-semibold transition-all border ${
+                      reason === preset
+                        ? 'bg-red-500/30 text-red-200 border-red-500/60 font-bold'
+                        : 'bg-[#13151f] text-gray-400 border-white/5 hover:border-white/20'
+                    }`}
+                  >
+                    {preset}
+                  </button>
+                ))}
               </div>
+
+              <textarea
+                value={reason}
+                onChange={(e) => setReason(e.target.value)}
+                placeholder="Or write a specific reason…"
+                rows={3}
+                className="w-full p-3.5 rounded-2xl bg-[#0b0c10] border border-white/10 text-xs text-white placeholder-gray-500 focus:border-red-500/60 outline-none"
+              />
 
               <div className="grid grid-cols-2 gap-3 pt-2">
                 <button
-                  type="button"
-                  onClick={handleRejectAssignment}
-                  className="py-3 rounded-xl bg-red-500/10 hover:bg-red-500/20 text-red-300 hover:text-red-200 text-xs font-bold border border-red-500/30 transition-all flex items-center justify-center gap-1.5"
+                  onClick={() => { setRejectModalOpen(false); setCancelModalOpen(false); }}
+                  className="py-3 rounded-xl bg-white/5 hover:bg-white/10 text-gray-300 text-xs font-bold border border-white/10"
                 >
-                  <XCircle className="w-4 h-4" /> Decline / Cancel
+                  Go Back
                 </button>
-
                 <button
-                  type="button"
-                  onClick={handleAcceptAssignment}
-                  className="py-3 rounded-xl gradient-gold hover:opacity-95 text-black text-xs font-extrabold shadow-lg shadow-amber-500/30 flex items-center justify-center gap-1.5 active:scale-95"
+                  onClick={() => void (isReject ? handleReject() : handleCancelJob())}
+                  disabled={busy}
+                  className="py-3 rounded-xl bg-red-600 hover:bg-red-500 text-white text-xs font-bold transition-all flex items-center justify-center gap-2 shadow-lg shadow-red-600/30"
                 >
-                  <CheckCircle2 className="w-4 h-4" /> Accept Job
+                  {busy ? <Loader2 className="w-4 h-4 animate-spin" /> : <XCircle className="w-4 h-4" />}
+                  Confirm
                 </button>
               </div>
             </div>
@@ -1098,293 +875,102 @@ export const BarberDashboard: React.FC<BarberDashboardProps> = ({ user }) => {
         );
       })()}
 
-      {/* ─── Decline / Reject with Reason Modal ──────────────────────────────── */}
-      {rejectModalOpen && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/85 backdrop-blur-md animate-fade-in">
-          <div className="glass-card rounded-3xl p-6 md:p-8 w-full max-w-md border-red-500/40 space-y-5 text-left shadow-2xl">
-            <div className="flex items-center justify-between pb-3 border-b border-white/10">
-              <h3 className="text-lg font-bold text-white flex items-center gap-2">
-                <XCircle className="w-5 h-5 text-red-400" />
-                Decline Booking Request
-              </h3>
-              <button
-                onClick={() => setRejectModalOpen(false)}
-                className="p-1 rounded-lg text-gray-400 hover:text-white"
-              >
-                <X className="w-5 h-5" />
-              </button>
-            </div>
-
-            <p className="text-xs text-gray-300">
-              Select or provide a reason for declining. This updates the customer status and alerts the Admin to allocate another partner:
-            </p>
-
-            {/* Quick preset chips */}
-            <div className="flex flex-wrap gap-2">
-              {[
-                'Schedule conflict / Busy',
-                'Vehicle / Transport issue',
-                'Customer location is too far',
-                'Personal emergency',
-                'Tools / Equipment unavailable',
-              ].map((reasonChip) => (
-                <button
-                  key={reasonChip}
-                  type="button"
-                  onClick={() => setRejectReason(reasonChip)}
-                  className={`px-3 py-1.5 rounded-xl text-[11px] font-semibold transition-all border ${
-                    rejectReason === reasonChip
-                      ? 'bg-red-500/30 text-red-200 border-red-500/60 font-bold'
-                      : 'bg-obsidian-800/80 text-gray-400 border-white/5 hover:border-white/20'
-                  }`}
-                >
-                  {reasonChip}
-                </button>
-              ))}
-            </div>
-
-            <textarea
-              value={rejectReason}
-              onChange={(e) => setRejectReason(e.target.value)}
-              placeholder="Or write specific reason here..."
-              rows={3}
-              className="w-full p-3.5 rounded-2xl bg-obsidian-900 border border-white/10 text-xs text-white placeholder-gray-500 focus:border-red-500/60 outline-none"
-            />
-
-            <div className="grid grid-cols-2 gap-3 pt-2">
-              <button
-                type="button"
-                onClick={() => setRejectModalOpen(false)}
-                className="py-3 rounded-xl bg-white/5 hover:bg-white/10 text-gray-300 text-xs font-bold border border-white/10"
-              >
-                Go Back
-              </button>
-              <button
-                type="button"
-                onClick={handleRejectSubmit}
-                disabled={rejecting}
-                className="py-3 rounded-xl bg-red-600 hover:bg-red-500 text-white text-xs font-bold transition-all flex items-center justify-center gap-2 shadow-lg shadow-red-600/30"
-              >
-                {rejecting ? <Loader2 className="w-4 h-4 animate-spin" /> : <XCircle className="w-4 h-4" />}
-                Confirm Decline
-              </button>
-            </div>
-          </div>
-        </div>
-      )}
-
-      {/* ─── Cancel Active Accepted Job with Reason Modal ───────────────────── */}
-      {cancelActiveModalOpen && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/85 backdrop-blur-md animate-fade-in">
-          <div className="glass-card rounded-3xl p-6 md:p-8 w-full max-w-md border-red-500/40 space-y-5 text-left shadow-2xl">
-            <div className="flex items-center justify-between pb-3 border-b border-white/10">
-              <h3 className="text-lg font-bold text-white flex items-center gap-2">
-                <XCircle className="w-5 h-5 text-red-400" />
-                Cancel Accepted Service Job
-              </h3>
-              <button
-                onClick={() => setCancelActiveModalOpen(false)}
-                className="p-1 rounded-lg text-gray-400 hover:text-white"
-              >
-                <X className="w-5 h-5" />
-              </button>
-            </div>
-
-            <div className="p-3 rounded-2xl bg-amber-500/10 border border-amber-500/30 text-amber-200 text-xs leading-relaxed">
-              <strong>Note:</strong> Cancelling your accepted job will return the customer's request back to the system to find another nearby barber partner.
-            </div>
-
-            <p className="text-xs text-gray-300">
-              Select reason for emergency cancellation:
-            </p>
-
-            {/* Quick preset chips */}
-            <div className="flex flex-wrap gap-2">
-              {[
-                'Vehicle / Transport issue',
-                'Emergency medical situation',
-                'Customer address unreachable',
-                'Equipment / Grooming tool damage',
-                'Severe weather condition',
-              ].map((reasonChip) => (
-                <button
-                  key={reasonChip}
-                  type="button"
-                  onClick={() => setCancelActiveReason(reasonChip)}
-                  className={`px-3 py-1.5 rounded-xl text-[11px] font-semibold transition-all border ${
-                    cancelActiveReason === reasonChip
-                      ? 'bg-red-500/30 text-red-200 border-red-500/60 font-bold'
-                      : 'bg-obsidian-800/80 text-gray-400 border-white/5 hover:border-white/20'
-                  }`}
-                >
-                  {reasonChip}
-                </button>
-              ))}
-            </div>
-
-            <textarea
-              value={cancelActiveReason}
-              onChange={(e) => setCancelActiveReason(e.target.value)}
-              placeholder="Or write specific reason here..."
-              rows={3}
-              className="w-full p-3.5 rounded-2xl bg-obsidian-900 border border-white/10 text-xs text-white placeholder-gray-500 focus:border-red-500/60 outline-none"
-            />
-
-            <div className="grid grid-cols-2 gap-3 pt-2">
-              <button
-                type="button"
-                onClick={() => setCancelActiveModalOpen(false)}
-                className="py-3 rounded-xl bg-white/5 hover:bg-white/10 text-gray-300 text-xs font-bold border border-white/10"
-              >
-                Keep Job
-              </button>
-              <button
-                type="button"
-                onClick={handleCancelActiveSubmit}
-                disabled={cancellingActive}
-                className="py-3 rounded-xl bg-red-600 hover:bg-red-500 text-white text-xs font-bold transition-all flex items-center justify-center gap-2 shadow-lg shadow-red-600/30"
-              >
-                {cancellingActive ? <Loader2 className="w-4 h-4 animate-spin" /> : <XCircle className="w-4 h-4" />}
-                Confirm Cancel Job
-              </button>
-            </div>
-          </div>
-        </div>
-      )}
-
-      {/* ─── Completed Jobs & Earnings History ────────────────────────────────── */}
+      {/* ─── History ─────────────────────────────────────────────────────────── */}
       <div className="glass-card p-6 md:p-8 rounded-3xl border-white/10 space-y-6">
-        <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4">
-          <div className="flex items-center gap-3">
-            <div className="w-10 h-10 rounded-2xl bg-emerald-500/20 text-emerald-400 flex items-center justify-center">
-              <CheckCircle2 className="w-5 h-5" />
-            </div>
-            <div>
-              <h3 className="text-xl font-bold font-outfit text-white">Completed Jobs & Earnings History</h3>
-              <p className="text-xs text-gray-400">Past doorstep services fulfilled by you</p>
-            </div>
+        <div className="flex items-center gap-3">
+          <div className="w-10 h-10 rounded-2xl bg-emerald-500/20 text-emerald-400 flex items-center justify-center">
+            <CheckCircle2 className="w-5 h-5" />
           </div>
-
-          <button
-            onClick={fetchPastJobs}
-            disabled={loadingJobs}
-            className="px-4 py-2 rounded-xl bg-obsidian-800 hover:bg-obsidian-700 border border-white/10 text-gray-300 text-xs font-bold flex items-center gap-2 transition-all"
-          >
-            <Clock className={`w-3.5 h-3.5 text-purple-400 ${loadingJobs ? 'animate-spin' : ''}`} />
-            Refresh Records
-          </button>
+          <div>
+            <h3 className="text-xl font-bold font-outfit text-white">Job History & Earnings</h3>
+            <p className="text-xs text-gray-400">Doorstep services you have fulfilled</p>
+          </div>
         </div>
 
-        {/* Payout Metric Quick Banner */}
         <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
-          <div className="bg-obsidian-800/80 p-4 rounded-2xl border border-white/5 space-y-1">
-            <span className="text-[10px] text-gray-400 uppercase font-semibold">Total Completed Jobs</span>
+          <div className="bg-[#13151f]/80 p-4 rounded-2xl border border-white/5 space-y-1">
+            <span className="text-[10px] text-gray-400 uppercase font-semibold">Completed Jobs</span>
+            <div className="text-2xl font-extrabold text-white font-outfit">{completedJobs.length}</div>
+          </div>
+          <div className="bg-[#13151f]/80 p-4 rounded-2xl border border-white/5 space-y-1">
+            <span className="text-[10px] text-gray-400 uppercase font-semibold">Earnings (listed)</span>
+            <div className="text-2xl font-extrabold text-[#ff8a6a] font-outfit">
+              ₹{earnings.toLocaleString('en-IN')}
+            </div>
+          </div>
+          <div className="bg-[#13151f]/80 p-4 rounded-2xl border border-white/5 space-y-1">
+            <span className="text-[10px] text-gray-400 uppercase font-semibold">Rating</span>
             <div className="text-2xl font-extrabold text-white font-outfit">
-              {pastJobs.length > 0 ? pastJobs.length : profile?.totalCompletedJobs || 340}
+              {profile ? `${profile.rating.toFixed(2)} ★` : '—'}
             </div>
-            <span className="text-[10px] text-emerald-400 font-medium">100% Doorstep Verified</span>
-          </div>
-
-          <div className="bg-obsidian-800/80 p-4 rounded-2xl border border-white/5 space-y-1">
-            <span className="text-[10px] text-gray-400 uppercase font-semibold">Estimated Payout</span>
-            <div className="text-2xl font-extrabold text-amber-400 font-outfit">
-              ₹{(
-                pastJobs.reduce((sum, j) => sum + (j.bookingId?.serviceSnapshot?.price || 300), 0) ||
-                (profile?.totalCompletedJobs || 340) * 350
-              ).toLocaleString('en-IN')}
-            </div>
-            <span className="text-[10px] text-purple-300 font-medium">Direct Partner Settlement</span>
-          </div>
-
-          <div className="bg-obsidian-800/80 p-4 rounded-2xl border border-white/5 space-y-1">
-            <span className="text-[10px] text-gray-400 uppercase font-semibold">Customer Rating</span>
-            <div className="text-2xl font-extrabold text-purple-300 font-outfit">
-              {profile?.rating || 4.95} ★
-            </div>
-            <span className="text-[10px] text-gray-400 font-medium">Based on {profile?.totalReviews || 120} client reviews</span>
+            <span className="text-[10px] text-gray-400">
+              {profile ? `${profile.totalReviews} reviews` : ''}
+            </span>
           </div>
         </div>
 
-        {/* Past Jobs Table */}
-        <div className="overflow-x-auto">
-          <table className="w-full text-left text-xs text-gray-300">
-            <thead className="bg-obsidian-800/80 uppercase tracking-wider text-[10px] text-gray-400">
-              <tr>
-                <th className="px-4 py-3 rounded-l-xl">Client & Booking</th>
-                <th className="px-4 py-3">Service</th>
-                <th className="px-4 py-3">Date & Time</th>
-                <th className="px-4 py-3">Doorstep Address</th>
-                <th className="px-4 py-3">Payout</th>
-                <th className="px-4 py-3 rounded-r-xl">Status</th>
-              </tr>
-            </thead>
-            <tbody className="divide-y divide-white/5">
-              {pastJobs.length > 0 ? (
-                pastJobs.map((job) => {
-                  const b = job.bookingId || {};
-                  const cust = b.customerId || {};
-                  const price = b.serviceSnapshot?.price || 300;
-                  const serviceName = b.serviceSnapshot?.name || 'Haircut & Styling';
-                  const date = b.scheduledDate ? `${b.scheduledDate} ${b.startTime}` : 'Recent';
-                  const addr = b.addressSnapshot?.formattedAddress || 'Bhubaneswar Center';
+        {pastJobs.length === 0 ? (
+          <div className="p-8 rounded-2xl bg-[#13151f]/60 border border-white/5 text-center">
+            <p className="text-xs text-gray-400">
+              No jobs yet. Claim a request above to get started.
+            </p>
+          </div>
+        ) : (
+          <div className="overflow-x-auto">
+            <table className="w-full text-left text-xs text-gray-300">
+              <thead className="bg-[#13151f]/80 uppercase tracking-wider text-[10px] text-gray-400">
+                <tr>
+                  <th className="px-4 py-3 rounded-l-xl">Client & Booking</th>
+                  <th className="px-4 py-3">Service</th>
+                  <th className="px-4 py-3">Date & Time</th>
+                  <th className="px-4 py-3">Address</th>
+                  <th className="px-4 py-3">Price</th>
+                  <th className="px-4 py-3 rounded-r-xl">Status</th>
+                </tr>
+              </thead>
+              <tbody className="divide-y divide-white/5">
+                {pastJobs.map((job) => {
+                  const b = bookingOf(job);
+                  const cust = b && typeof b.customerId === 'object' ? b.customerId : null;
+                  const done = job.status === 'COMPLETED';
 
                   return (
                     <tr key={job._id} className="hover:bg-white/5 transition-colors">
                       <td className="px-4 py-3.5">
-                        <span className="font-bold text-white block">{cust.name || 'Client'}</span>
-                        <span className="text-[10px] text-gray-400 font-mono">#{b.bookingNumber || job._id?.slice(-6)}</span>
+                        <span className="font-bold text-white block">{cust?.name ?? 'Client'}</span>
+                        <span className="text-[10px] text-gray-400 font-mono">
+                          #{b?.bookingNumber ?? job._id.slice(-6)}
+                        </span>
                       </td>
-                      <td className="px-4 py-3.5 font-semibold text-purple-300">{serviceName}</td>
-                      <td className="px-4 py-3.5 text-gray-300">{date}</td>
-                      <td className="px-4 py-3.5 max-w-xs truncate text-gray-400">{addr}</td>
-                      <td className="px-4 py-3.5 text-amber-400 font-extrabold text-sm">₹{price}</td>
+                      <td className="px-4 py-3.5 font-semibold text-[#ff8a6a]">
+                        {b?.serviceSnapshot?.name ?? '—'}
+                      </td>
+                      <td className="px-4 py-3.5 text-gray-300">
+                        {b ? `${b.scheduledDate} ${b.startTime}` : '—'}
+                      </td>
+                      <td className="px-4 py-3.5 max-w-xs truncate text-gray-400">
+                        {b?.addressSnapshot?.formattedAddress ?? '—'}
+                      </td>
+                      <td className="px-4 py-3.5 text-[#ff8a6a] font-extrabold text-sm">
+                        {b ? `₹${b.serviceSnapshot.price}` : '—'}
+                      </td>
                       <td className="px-4 py-3.5">
-                        <span className="px-2.5 py-0.5 rounded-full bg-emerald-500/20 text-emerald-300 border border-emerald-500/30 text-[10px] font-bold">
-                          COMPLETED
+                        <span className={`px-2.5 py-0.5 rounded-full border text-[10px] font-bold ${
+                          done
+                            ? 'bg-emerald-500/20 text-emerald-300 border-emerald-500/30'
+                            : 'bg-white/5 text-gray-400 border-white/10'
+                        }`}>
+                          {job.status.replace(/_/g, ' ')}
                         </span>
                       </td>
                     </tr>
                   );
-                })
-              ) : (
-                <>
-                  <tr className="hover:bg-white/5 transition-colors">
-                    <td className="px-4 py-3.5">
-                      <span className="font-bold text-white block">Priya Mishra</span>
-                      <span className="text-[10px] text-gray-400 font-mono">#BK-92812</span>
-                    </td>
-                    <td className="px-4 py-3.5 font-semibold text-purple-300">Executive Haircut & Styling</td>
-                    <td className="px-4 py-3.5 text-gray-300">Yesterday at 15:30</td>
-                    <td className="px-4 py-3.5 text-gray-400">Bhubaneswar Center, Odisha</td>
-                    <td className="px-4 py-3.5 text-amber-400 font-extrabold text-sm">₹399</td>
-                    <td className="px-4 py-3.5">
-                      <span className="px-2.5 py-0.5 rounded-full bg-emerald-500/20 text-emerald-300 border border-emerald-500/30 text-[10px] font-bold">
-                        COMPLETED
-                      </span>
-                    </td>
-                  </tr>
-                  <tr className="hover:bg-white/5 transition-colors">
-                    <td className="px-4 py-3.5">
-                      <span className="font-bold text-white block">Rahul Verma</span>
-                      <span className="text-[10px] text-gray-400 font-mono">#BK-87114</span>
-                    </td>
-                    <td className="px-4 py-3.5 font-semibold text-purple-300">Beard Sculpting & Hot Oil Spa</td>
-                    <td className="px-4 py-3.5 text-gray-300">2 days ago at 11:00</td>
-                    <td className="px-4 py-3.5 text-gray-400">Patia, Bhubaneswar</td>
-                    <td className="px-4 py-3.5 text-amber-400 font-extrabold text-sm">₹249</td>
-                    <td className="px-4 py-3.5">
-                      <span className="px-2.5 py-0.5 rounded-full bg-emerald-500/20 text-emerald-300 border border-emerald-500/30 text-[10px] font-bold">
-                        COMPLETED
-                      </span>
-                    </td>
-                  </tr>
-                </>
-              )}
-            </tbody>
-          </table>
-        </div>
+                })}
+              </tbody>
+            </table>
+          </div>
+        )}
       </div>
-
     </div>
   );
 };
