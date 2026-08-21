@@ -44,7 +44,7 @@ export const BarberDashboard: React.FC<BarberDashboardProps> = ({ user }) => {
 
   const fetchOpenBookings = async () => {
     try {
-      const res = await adminApi.getBookings({ limit: 50 });
+      const res = await barbersApi.getOpenBookings({ limit: 50 });
       if (res?.items) {
         const unassigned = res.items.filter((b: any) =>
           ['PENDING', 'SEARCHING', 'OFFERED', 'BARBER_CANCELLED', 'NO_BARBER_AVAILABLE'].includes(b.status)

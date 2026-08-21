@@ -19,6 +19,8 @@ import {
   RotateCw,
   MapPin,
   Navigation,
+  Scissors,
+  ArrowRight,
 } from 'lucide-react';
 
 import { fetchLiveCoordinates, getCachedCoordinates } from '../services/location';
@@ -216,54 +218,80 @@ export const AuthModal: React.FC<AuthModalProps> = ({
     }
   };
 
+  // Shared input styling
+  const inputClass =
+    'w-full bg-white/[0.04] border border-white/[0.10] rounded-xl px-4 py-3 pl-11 text-sm text-white placeholder-gray-500 outline-none transition-all duration-200 focus:border-[#ff6c4c]/60 focus:bg-white/[0.06] focus:ring-1 focus:ring-[#ff6c4c]/30 hover:border-white/20';
+  const labelClass = 'block text-[11px] font-semibold text-gray-400 uppercase tracking-wider mb-1.5';
+  const iconClass = 'w-4 h-4 text-[#ff6c4c]/70 absolute left-3.5 top-1/2 -translate-y-1/2';
+
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/85 backdrop-blur-xl animate-fade-in">
-      {/* Background Ambient Glow */}
-      <div className="absolute w-[500px] h-[500px] bg-purple-600/15 rounded-full blur-[140px] pointer-events-none"></div>
+    <div
+      className="fixed inset-0 z-50 flex items-center justify-center p-4"
+      onClick={(e) => e.target === e.currentTarget && onClose()}
+    >
+      {/* Backdrop */}
+      <div className="absolute inset-0 bg-black/80 backdrop-blur-md" />
 
-      <div className="glass-card rounded-3xl w-full max-w-md border-white/20 overflow-hidden shadow-2xl relative z-10 animate-bounce-short">
-        
-        {/* Header with App Logo */}
-        <div className="p-6 text-center border-b border-white/10 relative bg-obsidian-900/60">
-          <button
-            onClick={onClose}
-            className="absolute top-4 right-4 p-2 rounded-full hover:bg-white/10 text-gray-400 hover:text-white transition-colors"
-          >
-            <X className="w-5 h-5" />
-          </button>
+      {/* Ambient Glow Orbs */}
+      <div className="absolute top-1/3 left-1/4 w-[400px] h-[400px] bg-[#ff6c4c]/8 rounded-full blur-[150px] pointer-events-none" />
+      <div className="absolute bottom-1/3 right-1/4 w-[300px] h-[300px] bg-[#ff8a6a]/6 rounded-full blur-[120px] pointer-events-none" />
 
-          {/* App Logo */}
-          <div className="relative w-16 h-16 mx-auto mb-3">
-            <div className="absolute inset-0 rounded-2xl bg-purple-600/30 blur-md animate-pulse"></div>
-            <img
-              src="/logo.png"
-              alt="AURA Studio Logo"
-              className="w-16 h-16 rounded-2xl object-cover border border-purple-500/40 shadow-xl relative z-10"
-              onError={(e) => {
-                (e.target as HTMLElement).style.display = 'none';
-              }}
-            />
+      {/* Modal */}
+      <div
+        className="relative z-10 w-full max-w-[420px] bg-[#0e1017] border border-white/[0.08] rounded-2xl shadow-2xl shadow-black/60 overflow-hidden"
+        style={{ animation: 'fadeSlideUp 0.3s ease-out' }}
+      >
+        {/* Top accent line */}
+        <div className="h-[2px] w-full bg-gradient-to-r from-transparent via-[#ff6c4c] to-transparent opacity-60" />
+
+        {/* Close button */}
+        <button
+          onClick={onClose}
+          className="absolute top-4 right-4 z-20 p-1.5 rounded-lg hover:bg-white/[0.06] text-gray-500 hover:text-gray-300 transition-colors"
+        >
+          <X className="w-4 h-4" />
+        </button>
+
+        {/* Header Section */}
+        <div className="px-7 pt-7 pb-0">
+          {/* Logo & Brand */}
+          <div className="flex items-center gap-3 mb-5">
+            <div className="w-10 h-10 rounded-xl bg-gradient-to-br from-[#ff8a6a] via-[#ff6c4c] to-[#e54d2e] p-[2px] shadow-lg shadow-[#ff6c4c]/20">
+              <div className="w-full h-full bg-[#0e1017] rounded-[10px] flex items-center justify-center">
+                <Scissors className="w-5 h-5 text-[#ff6c4c]" />
+              </div>
+            </div>
+            <div>
+              <div className="flex items-center gap-2">
+                <span className="text-lg font-bold font-outfit tracking-tight text-white">AURA</span>
+                <span className="text-[9px] font-bold px-2 py-0.5 rounded-full bg-[#ff6c4c]/12 text-[#ff6c4c] border border-[#ff6c4c]/20">FLOW</span>
+              </div>
+              <span className="text-[10px] text-gray-500 font-medium">Doorstep Salon & Grooming</span>
+            </div>
           </div>
 
-          <h2 className="text-2xl font-extrabold font-outfit tracking-wider text-white flex items-center justify-center gap-1.5">
-            AURA <span className="text-xs px-2 py-0.5 rounded-full bg-purple-500/20 text-purple-400 border border-purple-500/30 font-semibold">STUDIO</span>
+          {/* Title */}
+          <h2 className="text-xl font-bold text-white tracking-tight">
+            {mode === 'login' && 'Welcome back'}
+            {mode === 'register' && 'Create your account'}
+            {mode === 'forgot_password' && 'Reset your password'}
           </h2>
-          <p className="text-[11px] text-gray-400 font-inter uppercase tracking-widest mt-1">
-            {mode === 'login' && 'Welcome Back • Secure Access'}
-            {mode === 'register' && 'Create Luxury Grooming Account'}
-            {mode === 'forgot_password' && 'Password Recovery & OTP Verification'}
+          <p className="text-sm text-gray-400 mt-1 mb-5">
+            {mode === 'login' && 'Sign in to manage your grooming appointments'}
+            {mode === 'register' && 'Join for premium doorstep grooming services'}
+            {mode === 'forgot_password' && `Step ${forgotStep} of 3 — ${forgotStep === 1 ? 'Verify identity' : forgotStep === 2 ? 'Enter OTP' : 'Set new password'}`}
           </p>
 
-          {/* Navigation Mode Pill Switches */}
-          {mode !== 'forgot_password' ? (
-            <div className="mt-5 p-1 bg-obsidian-800/80 rounded-2xl border border-white/10 grid grid-cols-2 text-xs font-bold">
+          {/* Mode Tabs (Login / Register) */}
+          {mode !== 'forgot_password' && (
+            <div className="flex gap-1 p-1 bg-white/[0.03] rounded-xl border border-white/[0.06] mb-5">
               <button
                 type="button"
                 onClick={() => { setMode('login'); setError(null); setSuccessMsg(null); }}
-                className={`py-2 rounded-xl transition-all ${
+                className={`flex-1 py-2 rounded-lg text-sm font-semibold transition-all duration-200 ${
                   mode === 'login'
-                    ? 'bg-purple-600 text-white shadow-lg shadow-purple-600/30'
-                    : 'text-gray-400 hover:text-white'
+                    ? 'bg-white/[0.08] text-white shadow-sm'
+                    : 'text-gray-500 hover:text-gray-300'
                 }`}
               >
                 Sign In
@@ -271,64 +299,60 @@ export const AuthModal: React.FC<AuthModalProps> = ({
               <button
                 type="button"
                 onClick={() => { setMode('register'); setError(null); setSuccessMsg(null); }}
-                className={`py-2 rounded-xl transition-all ${
+                className={`flex-1 py-2 rounded-lg text-sm font-semibold transition-all duration-200 ${
                   mode === 'register'
-                    ? 'bg-purple-600 text-white shadow-lg shadow-purple-600/30'
-                    : 'text-gray-400 hover:text-white'
+                    ? 'bg-white/[0.08] text-white shadow-sm'
+                    : 'text-gray-500 hover:text-gray-300'
                 }`}
               >
                 Register
               </button>
             </div>
-          ) : (
-            <div className="mt-4 flex items-center justify-between">
-              <button
-                type="button"
-                onClick={() => { setMode('login'); setForgotStep(1); setError(null); setSuccessMsg(null); }}
-                className="text-xs text-purple-400 hover:text-purple-300 flex items-center gap-1 font-semibold"
-              >
-                <ArrowLeft className="w-3.5 h-3.5" /> Back to Sign In
-              </button>
-              <span className="text-[11px] text-gray-400 font-mono">Step {forgotStep} of 3</span>
-            </div>
+          )}
+
+          {/* Forgot password back link */}
+          {mode === 'forgot_password' && (
+            <button
+              type="button"
+              onClick={() => { setMode('login'); setForgotStep(1); setError(null); setSuccessMsg(null); }}
+              className="flex items-center gap-1.5 text-sm text-gray-400 hover:text-[#ff6c4c] mb-5 transition-colors"
+            >
+              <ArrowLeft className="w-3.5 h-3.5" /> Back to sign in
+            </button>
           )}
         </div>
 
-
-
-        {/* Alerts & Messages */}
-        <div className="px-6 pt-3">
+        {/* Alerts */}
+        <div className="px-7">
           {error && (
-            <div className="p-3.5 rounded-2xl bg-red-500/10 border border-red-500/30 text-red-300 text-xs flex items-start gap-2 animate-pulse">
-              <AlertCircle className="w-4 h-4 shrink-0 mt-0.5" />
+            <div className="p-3 rounded-xl bg-red-500/[0.08] border border-red-500/20 text-red-300 text-xs flex items-start gap-2 mb-4">
+              <AlertCircle className="w-4 h-4 shrink-0 mt-0.5 text-red-400" />
               <span>{error}</span>
             </div>
           )}
           {successMsg && (
-            <div className="p-3.5 rounded-2xl bg-emerald-500/10 border border-emerald-500/30 text-emerald-300 text-xs flex items-start gap-2">
+            <div className="p-3 rounded-xl bg-emerald-500/[0.08] border border-emerald-500/20 text-emerald-300 text-xs flex items-start gap-2 mb-4">
               <CheckCircle2 className="w-4 h-4 shrink-0 mt-0.5 text-emerald-400" />
               <span>{successMsg}</span>
             </div>
           )}
         </div>
 
-        {/* ─── 1. SIGN IN / REGISTER FORM ────────────────────────────────────── */}
+        {/* ─── SIGN IN / REGISTER FORM ──────────────────────────── */}
         {mode !== 'forgot_password' ? (
-          <form onSubmit={handleAuthSubmit} className="p-6 space-y-4 pt-3">
-            {/* Account Role Selector */}
+          <form onSubmit={handleAuthSubmit} className="px-7 pb-7 space-y-4">
+            {/* Role Selector (Register Only) */}
             {mode === 'register' && (
               <div>
-                <label className="block text-[11px] font-bold text-gray-300 uppercase tracking-wider mb-2">
-                  Account Role Category
-                </label>
+                <label className={labelClass}>I am a</label>
                 <div className="grid grid-cols-2 gap-2">
                   <button
                     type="button"
                     onClick={() => setRole('CUSTOMER')}
-                    className={`p-2.5 rounded-xl border text-xs font-bold flex items-center justify-center gap-2 transition-all ${
+                    className={`p-3 rounded-xl border text-sm font-medium flex items-center justify-center gap-2 transition-all duration-200 ${
                       role === 'CUSTOMER'
-                        ? 'bg-purple-600/20 border-purple-500 text-purple-300 shadow-md'
-                        : 'bg-obsidian-800/50 border-white/10 text-gray-400 hover:text-white'
+                        ? 'bg-[#ff6c4c]/[0.08] border-[#ff6c4c]/40 text-[#ff8a6a]'
+                        : 'bg-white/[0.02] border-white/[0.08] text-gray-400 hover:border-white/15 hover:text-gray-300'
                     }`}
                   >
                     <UserIcon className="w-4 h-4" /> Customer
@@ -336,10 +360,10 @@ export const AuthModal: React.FC<AuthModalProps> = ({
                   <button
                     type="button"
                     onClick={() => setRole('BARBER')}
-                    className={`p-2.5 rounded-xl border text-xs font-bold flex items-center justify-center gap-2 transition-all ${
+                    className={`p-3 rounded-xl border text-sm font-medium flex items-center justify-center gap-2 transition-all duration-200 ${
                       role === 'BARBER'
-                        ? 'bg-amber-500/20 border-amber-500 text-amber-300 shadow-md'
-                        : 'bg-obsidian-800/50 border-white/10 text-gray-400 hover:text-white'
+                        ? 'bg-[#ff6c4c]/[0.08] border-[#ff6c4c]/40 text-[#ff8a6a]'
+                        : 'bg-white/[0.02] border-white/[0.08] text-gray-400 hover:border-white/15 hover:text-gray-300'
                     }`}
                   >
                     <Shield className="w-4 h-4" /> Partner Barber
@@ -348,84 +372,83 @@ export const AuthModal: React.FC<AuthModalProps> = ({
               </div>
             )}
 
+            {/* Full Name (Register) */}
             {mode === 'register' && (
               <div>
-                <label className="block text-[11px] font-bold text-gray-300 uppercase tracking-wider mb-1">
-                  Full Name
-                </label>
+                <label className={labelClass}>Full Name</label>
                 <div className="relative">
-                  <UserIcon className="w-4 h-4 text-purple-400 absolute left-3.5 top-3.5" />
+                  <UserIcon className={iconClass} />
                   <input
                     type="text"
                     required
                     placeholder="e.g. Priya Sharma"
                     value={name}
                     onChange={(e) => setName(e.target.value)}
-                    className="w-full glass-input pl-10 pr-4 py-3 rounded-2xl text-xs text-white placeholder-gray-500 focus:border-purple-500 transition-all"
+                    className={inputClass}
                   />
                 </div>
               </div>
             )}
 
+            {/* Email */}
             <div>
-              <label className="block text-[11px] font-bold text-gray-300 uppercase tracking-wider mb-1">
-                Email Address
-              </label>
+              <label className={labelClass}>Email Address</label>
               <div className="relative">
-                <Mail className="w-4 h-4 text-purple-400 absolute left-3.5 top-3.5" />
+                <Mail className={iconClass} />
                 <input
                   type="email"
                   required
                   placeholder="user@example.com"
                   value={email}
                   onChange={(e) => setEmail(e.target.value)}
-                  className="w-full glass-input pl-10 pr-4 py-3 rounded-2xl text-xs text-white placeholder-gray-500 focus:border-purple-500 transition-all"
+                  className={inputClass}
                 />
               </div>
             </div>
 
+            {/* Phone (Register) */}
             {mode === 'register' && (
               <div>
-                <label className="block text-[11px] font-bold text-gray-300 uppercase tracking-wider mb-1 flex items-center justify-between">
-                  <span>Mobile Number</span>
-                  <span className="text-[10px] text-amber-400 lowercase font-mono">Mandatory for OTP SMS</span>
-                </label>
+                <div className="flex items-center justify-between mb-1.5">
+                  <label className={`${labelClass} mb-0`}>Mobile Number</label>
+                  <span className="text-[10px] text-[#ff6c4c]/70 font-medium">Required for OTP</span>
+                </div>
                 <div className="relative">
-                  <Phone className="w-4 h-4 text-purple-400 absolute left-3.5 top-3.5" />
+                  <Phone className={iconClass} />
                   <input
                     type="tel"
                     required
-                    placeholder="+919876543210 or 9876543210"
+                    placeholder="+919876543210"
                     value={phone}
                     onChange={(e) => setPhone(e.target.value)}
-                    className="w-full glass-input pl-10 pr-4 py-3 rounded-2xl text-xs text-white placeholder-gray-500 focus:border-purple-500 transition-all"
+                    className={inputClass}
                   />
                 </div>
               </div>
             )}
 
-            {/* Mandatory Service Location for Registration */}
+            {/* Service Location (Register) */}
             {mode === 'register' && (
-              <div className="p-3.5 rounded-2xl bg-obsidian-800/90 border border-purple-500/30 space-y-2">
+              <div className="p-4 rounded-xl bg-white/[0.02] border border-white/[0.06] space-y-3">
                 <div className="flex items-center justify-between">
-                  <span className="text-[11px] font-bold text-gray-300 uppercase tracking-wider flex items-center gap-1.5">
-                    <MapPin className="w-3.5 h-3.5 text-purple-400" />
-                    Service Area / Doorstep Location
+                  <span className="text-[11px] font-semibold text-gray-400 uppercase tracking-wider flex items-center gap-1.5">
+                    <MapPin className="w-3.5 h-3.5 text-[#ff6c4c]/70" />
+                    Service Location
                   </span>
                   <button
                     type="button"
                     onClick={requestLocation}
                     disabled={locationLoading}
-                    className="text-[10px] text-purple-300 hover:text-white bg-purple-600/30 hover:bg-purple-600/50 px-2.5 py-1 rounded-lg border border-purple-500/40 flex items-center gap-1 transition-all"
+                    className="text-[11px] text-[#ff6c4c] hover:text-[#ff8a6a] bg-[#ff6c4c]/[0.06] hover:bg-[#ff6c4c]/10 px-2.5 py-1 rounded-lg border border-[#ff6c4c]/20 flex items-center gap-1 transition-all font-medium"
                   >
-                    <Navigation className={`w-3 h-3 text-purple-400 ${locationLoading ? 'animate-spin' : ''}`} />
-                    {locationLoading ? 'Detecting GPS...' : 'Detect My GPS'}
+                    <Navigation className={`w-3 h-3 ${locationLoading ? 'animate-spin' : ''}`} />
+                    {locationLoading ? 'Detecting...' : 'Auto Detect'}
                   </button>
                 </div>
 
                 <div className="grid grid-cols-2 gap-2">
                   <div>
-                    <span className="text-[9px] text-gray-400 block mb-0.5">Latitude (Mandatory)</span>
+                    <span className="text-[10px] text-gray-500 block mb-1">Latitude</span>
                     <input
                       type="number"
                       step="any"
@@ -433,11 +456,11 @@ export const AuthModal: React.FC<AuthModalProps> = ({
                       value={latitude}
                       onChange={(e) => setLatitude(Number(e.target.value))}
                       placeholder="e.g. 20.2961"
-                      className="w-full glass-input px-2.5 py-1.5 rounded-xl text-xs text-white"
+                      className="w-full bg-white/[0.04] border border-white/[0.08] rounded-lg px-3 py-2 text-xs text-white outline-none focus:border-[#ff6c4c]/40 transition-all"
                     />
                   </div>
                   <div>
-                    <span className="text-[9px] text-gray-400 block mb-0.5">Longitude (Mandatory)</span>
+                    <span className="text-[10px] text-gray-500 block mb-1">Longitude</span>
                     <input
                       type="number"
                       step="any"
@@ -445,23 +468,24 @@ export const AuthModal: React.FC<AuthModalProps> = ({
                       value={longitude}
                       onChange={(e) => setLongitude(Number(e.target.value))}
                       placeholder="e.g. 85.8245"
-                      className="w-full glass-input px-2.5 py-1.5 rounded-xl text-xs text-white"
+                      className="w-full bg-white/[0.04] border border-white/[0.08] rounded-lg px-3 py-2 text-xs text-white outline-none focus:border-[#ff6c4c]/40 transition-all"
                     />
                   </div>
                 </div>
 
-                <div className="flex items-center gap-1.5 text-[10px] text-emerald-400 pt-0.5">
-                  <span className="w-1.5 h-1.5 rounded-full bg-emerald-400 animate-pulse"></span>
-                  <span>{locationDetected ? 'Live GPS coordinates detected & synced.' : 'Required for doorstep barber allocation and arrival.'}</span>
-                </div>
+                {locationDetected && (
+                  <div className="flex items-center gap-1.5 text-[11px] text-emerald-400">
+                    <span className="w-1.5 h-1.5 rounded-full bg-emerald-400 animate-pulse" />
+                    <span>GPS coordinates detected & synced</span>
+                  </div>
+                )}
               </div>
             )}
 
+            {/* Password */}
             <div>
-              <div className="flex items-center justify-between mb-1">
-                <label className="block text-[11px] font-bold text-gray-300 uppercase tracking-wider">
-                  Password
-                </label>
+              <div className="flex items-center justify-between mb-1.5">
+                <label className={`${labelClass} mb-0`}>Password</label>
                 {mode === 'login' && (
                   <button
                     type="button"
@@ -471,95 +495,103 @@ export const AuthModal: React.FC<AuthModalProps> = ({
                       setError(null);
                       setSuccessMsg(null);
                     }}
-                    className="text-[11px] text-purple-400 hover:text-purple-300 font-semibold hover:underline"
+                    className="text-[11px] text-[#ff6c4c]/70 hover:text-[#ff6c4c] font-medium transition-colors"
                   >
-                    Forgot Password?
+                    Forgot password?
                   </button>
                 )}
               </div>
               <div className="relative">
-                <Lock className="w-4 h-4 text-purple-400 absolute left-3.5 top-3.5" />
+                <Lock className={iconClass} />
                 <input
                   type={showPassword ? 'text' : 'password'}
                   required
                   placeholder="••••••••"
                   value={password}
                   onChange={(e) => setPassword(e.target.value)}
-                  className="w-full glass-input pl-10 pr-12 py-3 rounded-2xl text-xs text-white placeholder-gray-500 focus:border-purple-500 transition-all"
+                  className={`${inputClass} pr-11`}
                 />
-
-                {/* View Password Toggle Button */}
                 <button
                   type="button"
                   onClick={() => setShowPassword(!showPassword)}
-                  title={showPassword ? 'Hide Password' : 'Show Password'}
-                  className="absolute right-3.5 top-3 p-1 rounded-lg hover:bg-white/10 text-gray-400 hover:text-white transition-colors"
+                  className="absolute right-3 top-1/2 -translate-y-1/2 p-1 rounded-md hover:bg-white/[0.06] text-gray-500 hover:text-gray-300 transition-colors"
                 >
-                  {showPassword ? (
-                    <EyeOff className="w-4 h-4 text-amber-400" />
-                  ) : (
-                    <Eye className="w-4 h-4 text-gray-400 hover:text-white" />
-                  )}
+                  {showPassword ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
                 </button>
               </div>
             </div>
 
+            {/* Submit */}
             <button
               type="submit"
               disabled={loading}
-              className="w-full py-3.5 rounded-2xl gradient-purple hover:opacity-95 text-white font-extrabold text-xs shadow-xl shadow-purple-600/30 transition-all flex items-center justify-center gap-2 mt-6 hover:scale-[1.02] active:scale-95"
+              className="w-full py-3 rounded-xl bg-gradient-to-r from-[#ff8a6a] via-[#ff6c4c] to-[#e54d2e] text-white font-semibold text-sm shadow-lg shadow-[#ff6c4c]/20 hover:shadow-[#ff6c4c]/30 transition-all duration-200 flex items-center justify-center gap-2 hover:brightness-110 active:scale-[0.98] disabled:opacity-50 disabled:cursor-not-allowed mt-2"
             >
               {loading ? (
-                <span className="w-4 h-4 border-2 border-white/30 border-t-white rounded-full animate-spin"></span>
+                <span className="w-4 h-4 border-2 border-white/30 border-t-white rounded-full animate-spin" />
               ) : mode === 'login' ? (
                 <>
-                  <span>Sign In to Account</span>
-                  <CheckCircle2 className="w-4 h-4" />
+                  <span>Sign In</span>
+                  <ArrowRight className="w-4 h-4" />
                 </>
               ) : (
                 <>
-                  <span>Create & Launch Account</span>
+                  <span>Create Account</span>
                   <Sparkles className="w-4 h-4" />
                 </>
               )}
             </button>
+
+            {/* Footer note */}
+            <p className="text-center text-[11px] text-gray-500 pt-1">
+              {mode === 'login' ? (
+                <>Don't have an account?{' '}
+                  <button type="button" onClick={() => { setMode('register'); setError(null); }} className="text-[#ff6c4c] hover:text-[#ff8a6a] font-medium transition-colors">
+                    Create one
+                  </button>
+                </>
+              ) : (
+                <>Already have an account?{' '}
+                  <button type="button" onClick={() => { setMode('login'); setError(null); }} className="text-[#ff6c4c] hover:text-[#ff8a6a] font-medium transition-colors">
+                    Sign in
+                  </button>
+                </>
+              )}
+            </p>
           </form>
         ) : (
-          /* ─── 2. FORGOT PASSWORD 3-STEP FLOW ──────────────────────────────── */
-          <div className="p-6 space-y-4 pt-3">
+          /* ─── FORGOT PASSWORD 3-STEP FLOW ──────────────────────── */
+          <div className="px-7 pb-7 space-y-4">
             {forgotStep === 1 && (
               <form onSubmit={handleForgotStep1} className="space-y-4">
-                <div className="p-3 bg-purple-900/20 border border-purple-500/30 rounded-2xl text-xs text-purple-200">
-                  Enter your registered <strong>Email Address</strong> or <strong>Mobile Number</strong>. We will dispatch a 6-digit OTP verification code via Twilio SMS & Email.
+                <div className="p-3 bg-[#ff6c4c]/[0.06] border border-[#ff6c4c]/15 rounded-xl text-xs text-gray-300 leading-relaxed">
+                  Enter your registered <strong className="text-white">email</strong> or <strong className="text-white">phone number</strong>. We'll send a 6-digit verification code.
                 </div>
                 <div>
-                  <label className="block text-[11px] font-bold text-gray-300 uppercase tracking-wider mb-1">
-                    Registered Email or Phone
-                  </label>
+                  <label className={labelClass}>Email or Phone</label>
                   <div className="relative">
-                    <Mail className="w-4 h-4 text-purple-400 absolute left-3.5 top-3.5" />
+                    <Mail className={iconClass} />
                     <input
                       type="text"
                       required
-                      placeholder="e.g. priya@example.com or +919876543210"
+                      placeholder="e.g. priya@example.com"
                       value={forgotIdentifier}
                       onChange={(e) => setForgotIdentifier(e.target.value)}
-                      className="w-full glass-input pl-10 pr-4 py-3 rounded-2xl text-xs text-white placeholder-gray-500 focus:border-purple-500 transition-all"
+                      className={inputClass}
                     />
                   </div>
                 </div>
-
                 <button
                   type="submit"
                   disabled={loading}
-                  className="w-full py-3.5 rounded-2xl gradient-purple hover:opacity-95 text-white font-extrabold text-xs shadow-xl shadow-purple-600/30 transition-all flex items-center justify-center gap-2 hover:scale-[1.02] active:scale-95"
+                  className="w-full py-3 rounded-xl bg-gradient-to-r from-[#ff8a6a] via-[#ff6c4c] to-[#e54d2e] text-white font-semibold text-sm shadow-lg shadow-[#ff6c4c]/20 transition-all flex items-center justify-center gap-2 hover:brightness-110 active:scale-[0.98] disabled:opacity-50"
                 >
                   {loading ? (
-                    <span className="w-4 h-4 border-2 border-white/30 border-t-white rounded-full animate-spin"></span>
+                    <span className="w-4 h-4 border-2 border-white/30 border-t-white rounded-full animate-spin" />
                   ) : (
                     <>
                       <KeyRound className="w-4 h-4" />
-                      <span>Send 6-Digit OTP</span>
+                      <span>Send Verification Code</span>
                     </>
                   )}
                 </button>
@@ -569,21 +601,19 @@ export const AuthModal: React.FC<AuthModalProps> = ({
             {forgotStep === 2 && (
               <form onSubmit={handleForgotStep2} className="space-y-4">
                 <div className="text-center">
-                  <p className="text-xs text-gray-300">
-                    We sent a 6-digit code to <strong className="text-purple-300">{forgotIdentifier}</strong>
+                  <p className="text-sm text-gray-300">
+                    Code sent to <strong className="text-[#ff8a6a]">{forgotIdentifier}</strong>
                   </p>
-                  <div className="flex items-center justify-center gap-1.5 text-xs text-amber-400 font-mono mt-1">
-                    <Clock className="w-3.5 h-3.5" />
+                  <div className="flex items-center justify-center gap-1.5 text-xs text-gray-400 mt-1">
+                    <Clock className="w-3.5 h-3.5 text-[#ff6c4c]/70" />
                     <span>
-                      Expires in: {Math.floor(otpExpiresIn / 60)}:{(otpExpiresIn % 60).toString().padStart(2, '0')}
+                      Expires in <span className="text-white font-mono font-medium">{Math.floor(otpExpiresIn / 60)}:{(otpExpiresIn % 60).toString().padStart(2, '0')}</span>
                     </span>
                   </div>
                 </div>
 
                 <div>
-                  <label className="block text-[11px] font-bold text-gray-300 uppercase tracking-wider mb-1 text-center">
-                    Enter 6-Digit OTP Code
-                  </label>
+                  <label className={`${labelClass} text-center`}>6-Digit Verification Code</label>
                   <input
                     type="text"
                     maxLength={6}
@@ -591,32 +621,32 @@ export const AuthModal: React.FC<AuthModalProps> = ({
                     placeholder="• • • • • •"
                     value={forgotOtp}
                     onChange={(e) => setForgotOtp(e.target.value.replace(/\D/g, ''))}
-                    className="w-full glass-input py-3.5 rounded-2xl text-center font-mono text-xl font-bold tracking-[0.4em] text-purple-300 border-purple-500/50 focus:border-purple-400 transition-all"
+                    className="w-full bg-white/[0.04] border border-white/[0.10] py-4 rounded-xl text-center font-mono text-2xl font-bold tracking-[0.5em] text-[#ff8a6a] outline-none focus:border-[#ff6c4c]/50 focus:ring-1 focus:ring-[#ff6c4c]/30 transition-all"
                   />
                 </div>
 
                 <button
                   type="submit"
                   disabled={loading || forgotOtp.length !== 6}
-                  className="w-full py-3.5 rounded-2xl gradient-purple hover:opacity-95 text-white font-extrabold text-xs shadow-xl shadow-purple-600/30 transition-all flex items-center justify-center gap-2 hover:scale-[1.02] active:scale-95 disabled:opacity-50"
+                  className="w-full py-3 rounded-xl bg-gradient-to-r from-[#ff8a6a] via-[#ff6c4c] to-[#e54d2e] text-white font-semibold text-sm shadow-lg shadow-[#ff6c4c]/20 transition-all flex items-center justify-center gap-2 hover:brightness-110 active:scale-[0.98] disabled:opacity-50"
                 >
                   {loading ? (
-                    <span className="w-4 h-4 border-2 border-white/30 border-t-white rounded-full animate-spin"></span>
+                    <span className="w-4 h-4 border-2 border-white/30 border-t-white rounded-full animate-spin" />
                   ) : (
                     <>
                       <CheckCircle2 className="w-4 h-4" />
-                      <span>Verify OTP Code</span>
+                      <span>Verify Code</span>
                     </>
                   )}
                 </button>
 
-                <div className="text-center pt-1">
+                <div className="text-center">
                   <button
                     type="button"
                     onClick={handleForgotStep1}
-                    className="text-xs text-purple-400 hover:text-purple-300 flex items-center justify-center gap-1 mx-auto font-semibold"
+                    className="text-xs text-gray-400 hover:text-[#ff6c4c] flex items-center justify-center gap-1 mx-auto font-medium transition-colors"
                   >
-                    <RotateCw className="w-3 h-3" /> Resend OTP Code via Twilio
+                    <RotateCw className="w-3 h-3" /> Resend code
                   </button>
                 </div>
               </form>
@@ -624,47 +654,43 @@ export const AuthModal: React.FC<AuthModalProps> = ({
 
             {forgotStep === 3 && (
               <form onSubmit={handleForgotStep3} className="space-y-4">
-                <div className="p-3 bg-emerald-900/20 border border-emerald-500/30 rounded-2xl text-xs text-emerald-200">
-                  OTP verified! Please create a strong new password (minimum 8 characters with letters & numbers).
+                <div className="p-3 bg-emerald-500/[0.06] border border-emerald-500/15 rounded-xl text-xs text-emerald-300">
+                  OTP verified! Create a new password (minimum 8 characters).
                 </div>
 
                 <div>
-                  <label className="block text-[11px] font-bold text-gray-300 uppercase tracking-wider mb-1">
-                    New Password
-                  </label>
+                  <label className={labelClass}>New Password</label>
                   <div className="relative">
-                    <Lock className="w-4 h-4 text-purple-400 absolute left-3.5 top-3.5" />
+                    <Lock className={iconClass} />
                     <input
                       type={showNewPassword ? 'text' : 'password'}
                       required
                       placeholder="••••••••"
                       value={newPassword}
                       onChange={(e) => setNewPassword(e.target.value)}
-                      className="w-full glass-input pl-10 pr-12 py-3 rounded-2xl text-xs text-white placeholder-gray-500 focus:border-purple-500 transition-all"
+                      className={`${inputClass} pr-11`}
                     />
                     <button
                       type="button"
                       onClick={() => setShowNewPassword(!showNewPassword)}
-                      className="absolute right-3.5 top-3 p-1 rounded-lg hover:bg-white/10 text-gray-400 hover:text-white"
+                      className="absolute right-3 top-1/2 -translate-y-1/2 p-1 rounded-md hover:bg-white/[0.06] text-gray-500 hover:text-gray-300 transition-colors"
                     >
-                      {showNewPassword ? <EyeOff className="w-4 h-4 text-amber-400" /> : <Eye className="w-4 h-4 text-gray-400" />}
+                      {showNewPassword ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
                     </button>
                   </div>
                 </div>
 
                 <div>
-                  <label className="block text-[11px] font-bold text-gray-300 uppercase tracking-wider mb-1">
-                    Confirm New Password
-                  </label>
+                  <label className={labelClass}>Confirm Password</label>
                   <div className="relative">
-                    <Lock className="w-4 h-4 text-purple-400 absolute left-3.5 top-3.5" />
+                    <Lock className={iconClass} />
                     <input
                       type={showNewPassword ? 'text' : 'password'}
                       required
                       placeholder="••••••••"
                       value={confirmPassword}
                       onChange={(e) => setConfirmPassword(e.target.value)}
-                      className="w-full glass-input pl-10 pr-4 py-3 rounded-2xl text-xs text-white placeholder-gray-500 focus:border-purple-500 transition-all"
+                      className={inputClass}
                     />
                   </div>
                 </div>
@@ -672,14 +698,14 @@ export const AuthModal: React.FC<AuthModalProps> = ({
                 <button
                   type="submit"
                   disabled={loading}
-                  className="w-full py-3.5 rounded-2xl gradient-purple hover:opacity-95 text-white font-extrabold text-xs shadow-xl shadow-purple-600/30 transition-all flex items-center justify-center gap-2 hover:scale-[1.02] active:scale-95"
+                  className="w-full py-3 rounded-xl bg-gradient-to-r from-[#ff8a6a] via-[#ff6c4c] to-[#e54d2e] text-white font-semibold text-sm shadow-lg shadow-[#ff6c4c]/20 transition-all flex items-center justify-center gap-2 hover:brightness-110 active:scale-[0.98] disabled:opacity-50"
                 >
                   {loading ? (
-                    <span className="w-4 h-4 border-2 border-white/30 border-t-white rounded-full animate-spin"></span>
+                    <span className="w-4 h-4 border-2 border-white/30 border-t-white rounded-full animate-spin" />
                   ) : (
                     <>
                       <Sparkles className="w-4 h-4" />
-                      <span>Update & Reset Password</span>
+                      <span>Reset Password</span>
                     </>
                   )}
                 </button>
@@ -687,8 +713,15 @@ export const AuthModal: React.FC<AuthModalProps> = ({
             )}
           </div>
         )}
-
       </div>
+
+      {/* Slide-up animation keyframe */}
+      <style>{`
+        @keyframes fadeSlideUp {
+          from { opacity: 0; transform: translateY(16px) scale(0.98); }
+          to { opacity: 1; transform: translateY(0) scale(1); }
+        }
+      `}</style>
     </div>
   );
 };

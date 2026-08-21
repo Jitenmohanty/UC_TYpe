@@ -23,13 +23,14 @@ api.interceptors.request.use((config) => {
 api.interceptors.response.use(
   (response) => response,
   (error) => {
-    if (error?.response?.status === 401) {
-      // Don't loop on login/register endpoints
+    const status = error?.response?.status;
+    // Only force re-auth on 401 (token expired/invalid), NOT on 403 (role forbidden)
+    if (status === 401) {
       const url = error?.config?.url || '';
       if (!url.includes('/auth/login') && !url.includes('/auth/register') && !url.includes('/auth/forgot-password') && !url.includes('/auth/verify-reset-otp') && !url.includes('/auth/reset-password')) {
         localStorage.removeItem('accessToken');
         window.dispatchEvent(new CustomEvent('auth:required', {
-          detail: { message: 'Please sign in to proceed with your booking.' }
+          detail: { message: 'Your session has expired. Please sign in again.' }
         }));
       }
     }
@@ -118,6 +119,10 @@ export const barbersApi = {
   },
   getMyBookings: async (params?: { page?: number; limit?: number }) => {
     const res = await api.get('/barbers/me/bookings', { params });
+    return res.data.data;
+  },
+  getOpenBookings: async (params?: { page?: number; limit?: number }) => {
+    const res = await api.get('/barbers/pool/open-bookings', { params });
     return res.data.data;
   },
 };

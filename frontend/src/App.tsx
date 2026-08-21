@@ -154,15 +154,22 @@ export function App() {
   };
 
   const handleLogout = () => {
-    authApi.logout();
+    authApi.logout().catch(() => {});
+    localStorage.removeItem('accessToken');
     setUser(null);
     setActiveView('customer');
+    setActiveBooking(null);
+    setCustomerOtp(null);
   };
 
-  const handleAuthSuccess = (authUser: User) => {
+  const handleAuthSuccess = (authUser: User, token: string) => {
+    // Save token to localStorage so axios interceptor can attach it to API requests
+    localStorage.setItem('accessToken', token);
     setUser(authUser);
     if (authUser.role === 'ADMIN') {
       setActiveView('admin');
+    } else if (authUser.role === 'BARBER') {
+      setActiveView('barber');
     }
   };
 

@@ -7,6 +7,9 @@ import { barberService } from './barber.service';
 import { sendSuccess } from '../../common/utils/response';
 import { locationUpdateRateLimiter } from '../../common/middleware/rateLimiter';
 import { UserRole } from '../../common/constants/roles';
+import { bookingRepository } from '../bookings/booking.repository';
+import { BookingStatus } from '../../common/constants/bookingStates';
+import { parsePagination } from '../../common/utils/pagination';
 import { z } from 'zod';
 
 export const barberRoutes = Router();
@@ -90,6 +93,24 @@ barberRoutes.get(
       page: parseInt(page ?? '1', 10),
       limit: parseInt(limit ?? '20', 10),
     });
+    sendSuccess(res, result);
+  }),
+);
+
+// ─── Open / Unassigned Bookings Pool (Barber-accessible) ──────────────────────
+barberRoutes.get(
+  '/pool/open-bookings',
+  authenticate,
+  requireRole(UserRole.BARBER),
+  asyncHandler(async (req, res) => {
+    const pagination = parsePagination(req.query as Record<string, unknown>);
+    const openStatuses: BookingStatus[] = [
+      BookingStatus.PENDING,
+      BookingStatus.SEARCHING,
+      BookingStatus.BARBER_CANCELLED,
+      BookingStatus.NO_BARBER_AVAILABLE,
+    ];
+    const result = await bookingRepository.findByStatus(openStatuses, pagination);
     sendSuccess(res, result);
   }),
 );
