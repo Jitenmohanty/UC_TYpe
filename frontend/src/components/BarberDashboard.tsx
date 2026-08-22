@@ -115,8 +115,23 @@ export const BarberDashboard: React.FC<BarberDashboardProps> = ({ user }) => {
   const pollRef = useRef(loadDashboard);
   pollRef.current = loadDashboard;
   useEffect(() => {
-    const id = setInterval(() => void pollRef.current(true), POLL_INTERVAL_MS);
-    return () => clearInterval(id);
+    const id = setInterval(() => {
+      if (!document.hidden) {
+        void pollRef.current(true);
+      }
+    }, POLL_INTERVAL_MS);
+
+    const handleVisibilityChange = () => {
+      if (!document.hidden) {
+        void pollRef.current(true);
+      }
+    };
+    document.addEventListener('visibilitychange', handleVisibilityChange);
+
+    return () => {
+      clearInterval(id);
+      document.removeEventListener('visibilitychange', handleVisibilityChange);
+    };
   }, []);
 
   // ─── Actions ────────────────────────────────────────────────────────────────

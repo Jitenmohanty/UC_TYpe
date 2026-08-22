@@ -348,7 +348,7 @@ export const BookingWizardModal: React.FC<BookingWizardModalProps> = ({
                     Select Service
                   </label>
                   <div className="grid grid-cols-1 sm:grid-cols-2 gap-2.5 max-h-48 overflow-y-auto pr-1">
-                    {services.map((srv) => (
+                    {activeServices.map((srv) => (
                       <div
                         key={srv._id}
                         onClick={() => setServiceId(srv._id)}
