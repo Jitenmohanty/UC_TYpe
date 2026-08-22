@@ -70,7 +70,7 @@ export function App() {
     servicesApi.getAll().then(setServices).catch(() => {});
   }, []);
 
-  // Poll for active booking and OTP for customer
+  // Poll for active booking and OTP for customer (visibility-aware and rate-optimized)
   useEffect(() => {
     if (!user || user.role !== 'CUSTOMER') {
       setActiveBooking(null);
@@ -78,10 +78,23 @@ export function App() {
       return;
     }
 
+    let isMounted = true;
+    let timerId: ReturnType<typeof setTimeout> | null = null;
+    let consecutiveErrors = 0;
+
     const checkActiveBooking = async () => {
+      // Pause polling if user is on another browser tab
+      if (document.hidden) {
+        scheduleNext(15000);
+        return;
+      }
+
       try {
         const bookings = await bookingApi.getMyBookings();
-        const active = bookings.find((b: Booking) => 
+        if (!isMounted) return;
+        consecutiveErrors = 0;
+
+        const active = bookings.find((b: Booking) =>
           ['PENDING', 'CONFIRMED', 'IN_PROGRESS', 'SEARCHING', 'BARBER_CANCELLED', 'ADMIN_CANCELLED'].includes(b.status)
         );
         setActiveBooking(active || null);
@@ -90,7 +103,7 @@ export function App() {
         if (active && (active.status === 'CONFIRMED' || active.status === 'IN_PROGRESS')) {
           try {
             const otpData = await bookingApi.getOtp(active._id);
-            if (otpData?.otp) {
+            if (isMounted && otpData?.otp) {
               setCustomerOtp(otpData.otp);
               setOtpExpiresAt(otpData.expiresAt);
             }
@@ -101,14 +114,40 @@ export function App() {
           setCustomerOtp(null);
           setOtpExpiresAt(null);
         }
+
+        // Active booking needs more frequent polling (8s), idle customer needs less (25s)
+        const nextDelay = active ? 8000 : 25000;
+        scheduleNext(nextDelay);
       } catch {
-        // Silently handle
+        if (!isMounted) return;
+        consecutiveErrors += 1;
+        // Exponential backoff on errors to avoid infinite request storms (up to 60s)
+        const errorDelay = Math.min(60000, 10000 * Math.pow(1.5, consecutiveErrors));
+        scheduleNext(errorDelay);
       }
     };
 
-    checkActiveBooking();
-    const interval = setInterval(checkActiveBooking, 5000);
-    return () => clearInterval(interval);
+    const scheduleNext = (delayMs: number) => {
+      if (!isMounted) return;
+      if (timerId) clearTimeout(timerId);
+      timerId = setTimeout(checkActiveBooking, delayMs);
+    };
+
+    const handleVisibilityChange = () => {
+      if (!document.hidden) {
+        // Immediately refresh when user returns to the tab
+        void checkActiveBooking();
+      }
+    };
+
+    document.addEventListener('visibilitychange', handleVisibilityChange);
+    void checkActiveBooking();
+
+    return () => {
+      isMounted = false;
+      if (timerId) clearTimeout(timerId);
+      document.removeEventListener('visibilitychange', handleVisibilityChange);
+    };
   }, [user]);
 
   // Countdown timer for OTP expiry

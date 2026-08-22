@@ -1,6 +1,6 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import type { ServiceItem, BarberProfile, Booking } from '../types';
-import { bookingApi, barbersApi } from '../services/api';
+import { bookingApi, barbersApi, servicesApi } from '../services/api';
 import { fetchLiveCoordinates, getCachedCoordinates } from '../services/location';
 import { X, AlertCircle, Sparkles, UserCheck, Scissors, Calendar, Clock, MapPin, Navigation, Phone, Home, Compass, Search } from 'lucide-react';
 
@@ -22,10 +22,11 @@ export const BookingWizardModal: React.FC<BookingWizardModalProps> = ({
   onClose,
   selectedService,
   selectedBarber,
-  services,
+  services: initialServices,
   onBookingCreated,
 }) => {
   const [step, setStep] = useState<1 | 2 | 3>(1);
+  const [activeServices, setActiveServices] = useState<ServiceItem[]>(initialServices);
 
   // Live real-time coordinates
   const initialCoords = getCachedCoordinates();
@@ -42,6 +43,19 @@ export const BookingWizardModal: React.FC<BookingWizardModalProps> = ({
   const [searchPlaceQuery, setSearchPlaceQuery] = useState<string>('');
   const [searchingPlace, setSearchingPlace] = useState<boolean>(false);
   const [addressDetails, setAddressDetails] = useState<{ city?: string; state?: string; country?: string }>({});
+
+  const lastNearbyQueryRef = useRef<string>('');
+
+  // Keep activeServices updated from prop or fetch if empty
+  useEffect(() => {
+    if (initialServices && initialServices.length > 0) {
+      setActiveServices(initialServices);
+    } else if (isOpen) {
+      servicesApi.getAll().then((list) => {
+        if (list && list.length > 0) setActiveServices(list);
+      }).catch(() => {});
+    }
+  }, [initialServices, isOpen]);
 
   const handleSearchPlace = async (queryToSearch?: string) => {
     const query = queryToSearch || searchPlaceQuery;
@@ -105,31 +119,39 @@ export const BookingWizardModal: React.FC<BookingWizardModalProps> = ({
     }
   };
 
-  // Fetch live GPS when the modal opens. Guarded on isOpen so a closed modal
-  // never prompts for location permission on page load.
+  // Fetch live GPS once when the modal opens if not detected
   useEffect(() => {
     if (!isOpen) return;
-    void requestLiveLocation();
+    if (!locationDetected) {
+      void requestLiveLocation();
+    }
   }, [isOpen]);
 
-  useEffect(() => {
-    if (!isOpen) return;
-    if (step === 3 && !locationDetected) {
-      void requestLiveLocation();
-    } else if (step === 3 && latitude && longitude && !formattedAddress) {
-      void resolveAddressFromCoords(latitude, longitude);
+  // Helper to match service by ID or fuzzy-match by name/category
+  const findMatchingServiceId = (serviceObj: ServiceItem | null | undefined, list: ServiceItem[]): string => {
+    if (serviceObj && isValidMongoId(serviceObj._id)) {
+      return serviceObj._id;
     }
-  }, [isOpen, step, latitude, longitude]);
+    if (serviceObj?.name && list.length > 0) {
+      const matchByName = list.find((s) => s.name.trim().toLowerCase() === serviceObj.name.trim().toLowerCase() && isValidMongoId(s._id));
+      if (matchByName) return matchByName._id;
+    }
+    if (serviceObj?.categoryId && list.length > 0) {
+      const matchByCat = list.find((s) => s.categoryId === serviceObj.categoryId && isValidMongoId(s._id));
+      if (matchByCat) return matchByCat._id;
+    }
+    return list.find((s) => isValidMongoId(s._id))?._id || '';
+  };
 
   // Initialize service & barber state on open/props change
   useEffect(() => {
     if (!isOpen) return;
 
-    // Pick valid service
-    const validService = selectedService && isValidMongoId(selectedService._id)
-      ? selectedService._id
-      : services.find((s) => isValidMongoId(s._id))?._id || '';
-    setServiceId(validService);
+    // Pick valid service dynamically
+    const validService = findMatchingServiceId(selectedService, activeServices);
+    if (validService) {
+      setServiceId(validService);
+    }
 
     // Pick valid barber if provided
     if (selectedBarber && isValidMongoId(selectedBarber._id)) {
@@ -140,14 +162,18 @@ export const BookingWizardModal: React.FC<BookingWizardModalProps> = ({
       setBarberPreference('ANY');
     }
 
-    // Fetch nearby barbers list based on live location
-    barbersApi.getNearby({ latitude, longitude, radiusKm: 10 })
-      .then((list) => {
-        const validList = list.filter((b) => isValidMongoId(b._id));
-        setAvailableBarbers(validList);
-      })
-      .catch(() => {});
-  }, [isOpen, selectedService, selectedBarber, services, latitude, longitude]);
+    // Fetch nearby barbers list with query deduplication
+    const queryKey = `${latitude.toFixed(4)},${longitude.toFixed(4)}`;
+    if (lastNearbyQueryRef.current !== queryKey) {
+      lastNearbyQueryRef.current = queryKey;
+      barbersApi.getNearby({ latitude, longitude, radiusKm: 10 })
+        .then((list) => {
+          const validList = list.filter((b) => isValidMongoId(b._id));
+          setAvailableBarbers(validList);
+        })
+        .catch(() => {});
+    }
+  }, [isOpen, selectedService, selectedBarber, activeServices, latitude, longitude]);
 
   // Every hook must run on every render, so this early return has to sit BELOW
   // them all. It previously sat at the top of the component, which meant the
@@ -173,11 +199,10 @@ export const BookingWizardModal: React.FC<BookingWizardModalProps> = ({
       // Fallback to currently selected coordinates
     }
 
-    // Validate serviceId — never fall back to a hardcoded id, which produced
-    // confusing "Service not found" errors from the API.
+    // Validate serviceId — dynamically resolve against backend activeServices list
     const finalServiceId = isValidMongoId(serviceId)
       ? serviceId
-      : services.find((s) => isValidMongoId(s._id))?._id;
+      : findMatchingServiceId(selectedService, activeServices);
 
     if (!finalServiceId) {
       setSearching(false);
