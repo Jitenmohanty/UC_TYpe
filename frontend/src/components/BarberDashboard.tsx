@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useCallback, useRef } from 'react';
+import React, { useState, useEffect, useCallback } from 'react';
 import type { Assignment, BarberProfile, Booking } from '../types';
 import { barbersApi, assignmentApi, bookingApi, apiErrorMessage } from '../services/api';
 import {
@@ -10,9 +10,6 @@ import {
 interface BarberDashboardProps {
   user: { _id?: string; name?: string } | null;
 }
-
-/** How often the dashboard re-fetches from the server. */
-const POLL_INTERVAL_MS = 20000;
 
 /** Assignment statuses where the barber is actively working the job. */
 const IN_FLIGHT: Assignment['status'][] = ['ACCEPTED', 'EN_ROUTE', 'ARRIVED', 'IN_PROGRESS'];
@@ -110,29 +107,6 @@ export const BarberDashboard: React.FC<BarberDashboardProps> = ({ user }) => {
     void loadProfile();
     void loadDashboard();
   }, [loadProfile, loadDashboard]);
-
-  // Poll so admin assignments and new customer bookings appear on their own.
-  const pollRef = useRef(loadDashboard);
-  pollRef.current = loadDashboard;
-  useEffect(() => {
-    const id = setInterval(() => {
-      if (!document.hidden) {
-        void pollRef.current(true);
-      }
-    }, POLL_INTERVAL_MS);
-
-    const handleVisibilityChange = () => {
-      if (!document.hidden) {
-        void pollRef.current(true);
-      }
-    };
-    document.addEventListener('visibilitychange', handleVisibilityChange);
-
-    return () => {
-      clearInterval(id);
-      document.removeEventListener('visibilitychange', handleVisibilityChange);
-    };
-  }, []);
 
   // ─── Actions ────────────────────────────────────────────────────────────────
   const runAction = async (key: string, fn: () => Promise<string>) => {

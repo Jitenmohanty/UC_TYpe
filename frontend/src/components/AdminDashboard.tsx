@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useCallback, useRef } from 'react';
+import React, { useState, useEffect, useCallback } from 'react';
 import {
   ShieldCheck, Users, Calendar, IndianRupee, Activity, RefreshCw, CheckCircle2,
   Clock, UserCheck, MapPin, Scissors, AlertCircle, Ban, X, Loader2, Inbox,
@@ -10,8 +10,6 @@ import { adminApi, apiErrorMessage } from '../services/api';
 interface AdminDashboardProps {
   user: User | null;
 }
-
-const POLL_INTERVAL_MS = 20000;
 
 const TERMINAL: Booking['status'][] = [
   'COMPLETED', 'CUSTOMER_CANCELLED', 'ADMIN_CANCELLED', 'EXPIRED',
@@ -78,29 +76,6 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({ user }) => {
   useEffect(() => {
     void load();
   }, [load]);
-
-  // Poll so new customer bookings show up without a manual refresh.
-  const pollRef = useRef(load);
-  pollRef.current = load;
-  useEffect(() => {
-    const id = setInterval(() => {
-      if (!document.hidden) {
-        void pollRef.current(true);
-      }
-    }, POLL_INTERVAL_MS);
-
-    const handleVisibilityChange = () => {
-      if (!document.hidden) {
-        void pollRef.current(true);
-      }
-    };
-    document.addEventListener('visibilitychange', handleVisibilityChange);
-
-    return () => {
-      clearInterval(id);
-      document.removeEventListener('visibilitychange', handleVisibilityChange);
-    };
-  }, []);
 
   // ─── Actions ────────────────────────────────────────────────────────────────
   const handleToggleBarberStatus = async (barberId: string, currentStatus: string) => {

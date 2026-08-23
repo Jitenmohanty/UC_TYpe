@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useCallback } from 'react';
 import { Navbar } from './components/Navbar';
 import { Hero } from './components/Hero';
 import { BentoFeatures } from './components/BentoFeatures';
@@ -70,85 +70,50 @@ export function App() {
     servicesApi.getAll().then(setServices).catch(() => {});
   }, []);
 
-  // Poll for active booking and OTP for customer (visibility-aware and rate-optimized)
-  useEffect(() => {
+  const [refreshingBooking, setRefreshingBooking] = useState<boolean>(false);
+
+  // Load active booking and OTP for customer (on-demand only, NO polling loops)
+  const checkActiveBooking = useCallback(async (silent = false) => {
     if (!user || user.role !== 'CUSTOMER') {
       setActiveBooking(null);
       setCustomerOtp(null);
       return;
     }
 
-    let isMounted = true;
-    let timerId: ReturnType<typeof setTimeout> | null = null;
-    let consecutiveErrors = 0;
+    if (!silent) setRefreshingBooking(true);
+    try {
+      const bookings = await bookingApi.getMyBookings();
+      const active = bookings.find((b: Booking) =>
+        ['PENDING', 'CONFIRMED', 'IN_PROGRESS', 'SEARCHING', 'BARBER_CANCELLED', 'ADMIN_CANCELLED'].includes(b.status)
+      );
+      setActiveBooking(active || null);
 
-    const checkActiveBooking = async () => {
-      // Pause polling if user is on another browser tab
-      if (document.hidden) {
-        scheduleNext(15000);
-        return;
-      }
-
-      try {
-        const bookings = await bookingApi.getMyBookings();
-        if (!isMounted) return;
-        consecutiveErrors = 0;
-
-        const active = bookings.find((b: Booking) =>
-          ['PENDING', 'CONFIRMED', 'IN_PROGRESS', 'SEARCHING', 'BARBER_CANCELLED', 'ADMIN_CANCELLED'].includes(b.status)
-        );
-        setActiveBooking(active || null);
-
-        // If active confirmed booking, fetch OTP details for customer
-        if (active && (active.status === 'CONFIRMED' || active.status === 'IN_PROGRESS')) {
-          try {
-            const otpData = await bookingApi.getOtp(active._id);
-            if (isMounted && otpData?.otp) {
-              setCustomerOtp(otpData.otp);
-              setOtpExpiresAt(otpData.expiresAt);
-            }
-          } catch {
-            // OTP might not be generated yet
+      // If active confirmed booking, fetch OTP details for customer
+      if (active && (active.status === 'CONFIRMED' || active.status === 'IN_PROGRESS')) {
+        try {
+          const otpData = await bookingApi.getOtp(active._id);
+          if (otpData?.otp) {
+            setCustomerOtp(otpData.otp);
+            setOtpExpiresAt(otpData.expiresAt);
           }
-        } else {
-          setCustomerOtp(null);
-          setOtpExpiresAt(null);
+        } catch {
+          // OTP might not be generated yet
         }
-
-        // Active booking needs more frequent polling (8s), idle customer needs less (25s)
-        const nextDelay = active ? 8000 : 25000;
-        scheduleNext(nextDelay);
-      } catch {
-        if (!isMounted) return;
-        consecutiveErrors += 1;
-        // Exponential backoff on errors to avoid infinite request storms (up to 60s)
-        const errorDelay = Math.min(60000, 10000 * Math.pow(1.5, consecutiveErrors));
-        scheduleNext(errorDelay);
+      } else {
+        setCustomerOtp(null);
+        setOtpExpiresAt(null);
       }
-    };
-
-    const scheduleNext = (delayMs: number) => {
-      if (!isMounted) return;
-      if (timerId) clearTimeout(timerId);
-      timerId = setTimeout(checkActiveBooking, delayMs);
-    };
-
-    const handleVisibilityChange = () => {
-      if (!document.hidden) {
-        // Immediately refresh when user returns to the tab
-        void checkActiveBooking();
-      }
-    };
-
-    document.addEventListener('visibilitychange', handleVisibilityChange);
-    void checkActiveBooking();
-
-    return () => {
-      isMounted = false;
-      if (timerId) clearTimeout(timerId);
-      document.removeEventListener('visibilitychange', handleVisibilityChange);
-    };
+    } catch {
+      // Silent error handling
+    } finally {
+      if (!silent) setRefreshingBooking(false);
+    }
   }, [user]);
+
+  // Load once when user logs in or changes
+  useEffect(() => {
+    void checkActiveBooking(true);
+  }, [checkActiveBooking]);
 
   // Countdown timer for OTP expiry
   useEffect(() => {
@@ -219,6 +184,7 @@ export function App() {
     setIsBookingOpen(false);
     setToastMessage(`🎉 Appointment #${newBooking.bookingNumber} created successfully!`);
     setTimeout(() => setToastMessage(null), 4000);
+    void checkActiveBooking(true);
   };
 
   const formatCountdown = (seconds: number) => {
@@ -254,9 +220,9 @@ export function App() {
       />
 
       <main className="flex-1">
-        {activeView === 'admin' ? (
+        {activeView === 'admin' && user?.role === 'ADMIN' ? (
           <AdminDashboard user={user} />
-        ) : activeView === 'barber' ? (
+        ) : activeView === 'barber' && user?.role === 'BARBER' ? (
           <BarberDashboard user={user} />
         ) : (
           <>
@@ -282,6 +248,16 @@ export function App() {
                   </div>
 
                   <div className="flex flex-wrap items-center gap-3">
+                    <button
+                      onClick={() => void checkActiveBooking(false)}
+                      disabled={refreshingBooking}
+                      title="Refresh Booking Status"
+                      className="px-3 py-1.5 rounded-xl bg-white/[0.06] hover:bg-white/[0.12] border border-white/[0.1] text-xs font-bold text-gray-200 transition-all flex items-center gap-1.5 active:scale-95"
+                    >
+                      <RefreshCw className={`w-3.5 h-3.5 text-[#ff6c4c] ${refreshingBooking ? 'animate-spin' : ''}`} />
+                      <span>{refreshingBooking ? 'Refreshing...' : 'Refresh Status'}</span>
+                    </button>
+
                     <button
                       onClick={() => setIsHistoryOpen(true)}
                       className="text-xs text-[#ff6c4c] hover:text-[#ff8a6a] underline font-bold"
@@ -491,7 +467,10 @@ export function App() {
 
       <CustomerBookingsModal
         isOpen={isHistoryOpen}
-        onClose={() => setIsHistoryOpen(false)}
+        onClose={() => {
+          setIsHistoryOpen(false);
+          void checkActiveBooking(true);
+        }}
         onSelectRebook={(serviceId) => {
           const s = services.find((srv) => srv._id === serviceId);
           if (s) {
