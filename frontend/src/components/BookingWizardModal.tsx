@@ -297,12 +297,12 @@ export const BookingWizardModal: React.FC<BookingWizardModalProps> = ({
         {searching ? (
           <div className="p-12 text-center space-y-6">
             <div className="relative w-28 h-28 mx-auto flex items-center justify-center">
-              <div className="absolute inset-0 rounded-full border-4 border-purple-500/20 border-t-purple-500 animate-spin"></div>
-              <Compass className="w-12 h-12 text-amber-400 animate-pulse" />
+              <div className="absolute inset-0 rounded-full border-4 border-[#ff6c4c]/20 border-t-[#ff6c4c] animate-spin"></div>
+              <Compass className="w-12 h-12 text-[#ff8a6a] animate-pulse" />
             </div>
             <div>
-              <h4 className="text-lg font-bold text-white">Connecting With Assigned Barber</h4>
-              <p className="text-xs text-gray-400 max-w-sm mx-auto mt-1">
+              <h4 className="text-lg font-extrabold text-white">Connecting With Assigned Barber</h4>
+              <p className="text-xs text-gray-400 max-w-sm mx-auto mt-1 leading-relaxed">
                 Your GPS doorstep coordinates & contact details have been safely registered and sent.
               </p>
             </div>
@@ -322,8 +322,8 @@ export const BookingWizardModal: React.FC<BookingWizardModalProps> = ({
                   onClick={() => setStep(item.s as any)}
                   className={`p-2.5 rounded-xl border text-center cursor-pointer transition-all ${
                     step === item.s
-                      ? 'bg-purple-600/20 border-purple-500 text-purple-300 shadow-md font-bold'
-                      : 'bg-obsidian-800/40 border-white/5 text-gray-500 hover:text-gray-300'
+                      ? 'bg-[#ff6c4c]/15 border-[#ff6c4c]/50 text-[#ff8a6a] shadow-md font-extrabold'
+                      : 'bg-[#13151f] border-white/5 text-gray-500 hover:text-gray-300'
                   }`}
                 >
                   <span className="text-[10px] block font-mono">Step {item.s}</span>
@@ -344,7 +344,7 @@ export const BookingWizardModal: React.FC<BookingWizardModalProps> = ({
               <div className="space-y-4">
                 <div>
                   <label className="block text-xs font-bold text-gray-300 uppercase tracking-wider mb-2 flex items-center gap-1.5">
-                    <Scissors className="w-4 h-4 text-purple-400" />
+                    <Scissors className="w-4 h-4 text-[#ff6c4c]" />
                     Select Service
                   </label>
                   <div className="grid grid-cols-1 sm:grid-cols-2 gap-2.5 max-h-48 overflow-y-auto pr-1">
@@ -354,15 +354,15 @@ export const BookingWizardModal: React.FC<BookingWizardModalProps> = ({
                         onClick={() => setServiceId(srv._id)}
                         className={`p-3 rounded-2xl border cursor-pointer transition-all flex items-center justify-between ${
                           serviceId === srv._id
-                            ? 'bg-purple-600/20 border-purple-500 text-white shadow-lg shadow-purple-500/10'
-                            : 'bg-obsidian-800/60 border-white/5 text-gray-300 hover:bg-obsidian-800'
+                            ? 'bg-[#ff6c4c]/15 border-[#ff6c4c]/60 text-white shadow-lg shadow-[#ff6c4c]/10'
+                            : 'bg-[#13151f] border-white/5 text-gray-300 hover:bg-[#181b28]'
                         }`}
                       >
                         <div className="min-w-0 pr-2">
                           <h4 className="font-bold text-xs truncate">{srv.name}</h4>
                           <span className="text-[10px] text-gray-400">{srv.durationMinutes} mins</span>
                         </div>
-                        <span className="text-amber-400 font-extrabold text-xs">₹{srv.price}</span>
+                        <span className="text-[#ff8a6a] font-extrabold text-xs font-outfit">₹{srv.price}</span>
                       </div>
                     ))}
                   </div>
@@ -370,7 +370,7 @@ export const BookingWizardModal: React.FC<BookingWizardModalProps> = ({
 
                 <div>
                   <label className="block text-xs font-bold text-gray-300 uppercase tracking-wider mb-2 flex items-center gap-1.5">
-                    <UserCheck className="w-4 h-4 text-purple-400" />
+                    <UserCheck className="w-4 h-4 text-[#ff6c4c]" />
                     Preferred Partner Barber
                   </label>
                   <div className="space-y-2">
@@ -381,12 +381,12 @@ export const BookingWizardModal: React.FC<BookingWizardModalProps> = ({
                       }}
                       className={`p-3 rounded-2xl border cursor-pointer transition-all flex items-center justify-between ${
                         barberPreference === 'ANY'
-                          ? 'bg-purple-600/20 border-purple-500 text-white shadow-md'
-                          : 'bg-obsidian-800/60 border-white/5 text-gray-400 hover:text-gray-200'
+                          ? 'bg-[#ff6c4c]/15 border-[#ff6c4c]/50 text-white shadow-md'
+                          : 'bg-[#13151f] border-white/5 text-gray-400 hover:text-gray-200'
                       }`}
                     >
                       <div className="flex items-center gap-2.5">
-                        <Sparkles className="w-4 h-4 text-amber-400" />
+                        <Sparkles className="w-4 h-4 text-[#ff8a6a]" />
                         <div>
                           <span className="text-xs font-bold block text-white">Assign via Salon Admin</span>
                           <span className="text-[10px] text-gray-400">Admin reviews and assigns available partner</span>
@@ -403,12 +403,12 @@ export const BookingWizardModal: React.FC<BookingWizardModalProps> = ({
                         }}
                         className={`p-3 rounded-2xl border cursor-pointer transition-all flex items-center justify-between ${
                           barberPreference === 'SPECIFIC' && preferredBarberId === b._id
-                            ? 'bg-purple-600/20 border-purple-500 text-white shadow-md'
-                            : 'bg-obsidian-800/60 border-white/5 text-gray-300 hover:bg-obsidian-800'
+                            ? 'bg-[#ff6c4c]/15 border-[#ff6c4c]/50 text-white shadow-md'
+                            : 'bg-[#13151f] border-white/5 text-gray-300 hover:bg-[#181b28]'
                         }`}
                       >
                         <div className="flex items-center gap-2.5">
-                          <div className="w-8 h-8 rounded-xl gradient-purple flex items-center justify-center text-white text-xs font-bold">
+                          <div className="w-8 h-8 rounded-xl gradient-flow flex items-center justify-center text-white text-xs font-bold shadow-sm">
                             {b.user?.name?.charAt(0) || 'B'}
                           </div>
                           <div>
@@ -419,7 +419,7 @@ export const BookingWizardModal: React.FC<BookingWizardModalProps> = ({
                           </div>
                         </div>
                         {b.distanceKm !== undefined && (
-                          <span className="text-[10px] font-mono text-purple-300">{b.distanceKm.toFixed(1)} km away</span>
+                          <span className="text-[10px] font-mono text-[#ff8a6a]">{b.distanceKm.toFixed(1)} km away</span>
                         )}
                       </div>
                     ))}
@@ -433,7 +433,7 @@ export const BookingWizardModal: React.FC<BookingWizardModalProps> = ({
               <div className="space-y-4">
                 <div>
                   <label className="block text-xs font-bold text-gray-300 uppercase tracking-wider mb-1 flex items-center gap-1.5">
-                    <Calendar className="w-4 h-4 text-purple-400" />
+                    <Calendar className="w-4 h-4 text-[#ff6c4c]" />
                     Appointment Date
                   </label>
                   <input
@@ -447,7 +447,7 @@ export const BookingWizardModal: React.FC<BookingWizardModalProps> = ({
 
                 <div>
                   <label className="block text-xs font-bold text-gray-300 uppercase tracking-wider mb-1 flex items-center gap-1.5">
-                    <Clock className="w-4 h-4 text-purple-400" />
+                    <Clock className="w-4 h-4 text-[#ff6c4c]" />
                     Service Start Time
                   </label>
                   <input
@@ -468,7 +468,7 @@ export const BookingWizardModal: React.FC<BookingWizardModalProps> = ({
                 {/* Contact Phone */}
                 <div>
                   <label className="block text-[11px] font-bold text-gray-300 uppercase tracking-wider mb-1 flex items-center gap-1.5">
-                    <Phone className="w-3.5 h-3.5 text-amber-400" />
+                    <Phone className="w-3.5 h-3.5 text-[#ff6c4c]" />
                     Contact Mobile Number (For Barber Communication)
                   </label>
                   <input
@@ -485,7 +485,7 @@ export const BookingWizardModal: React.FC<BookingWizardModalProps> = ({
                 <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
                   <div>
                     <label className="block text-[10px] font-bold text-gray-400 uppercase tracking-wider mb-1 flex items-center gap-1">
-                      <Home className="w-3 h-3 text-purple-400" />
+                      <Home className="w-3 h-3 text-[#ff6c4c]" />
                       Flat / House / Door No. & Apartment
                     </label>
                     <input
@@ -543,10 +543,10 @@ export const BookingWizardModal: React.FC<BookingWizardModalProps> = ({
                 <div>
                   <label className="block text-[10px] font-bold text-gray-400 uppercase tracking-wider mb-1 flex items-center justify-between">
                     <span className="flex items-center gap-1">
-                      <Search className="w-3 h-3 text-purple-400" />
+                      <Search className="w-3 h-3 text-[#ff6c4c]" />
                       Search City / Town / Village / Landmark
                     </span>
-                    <span className="text-[10px] text-purple-300 font-normal">Fast GPS Locator</span>
+                    <span className="text-[10px] text-[#ff8a6a] font-semibold">Fast GPS Locator</span>
                   </label>
                   <div className="flex items-center gap-2">
                     <input
@@ -566,7 +566,7 @@ export const BookingWizardModal: React.FC<BookingWizardModalProps> = ({
                       type="button"
                       onClick={() => void handleSearchPlace()}
                       disabled={searchingPlace}
-                      className="px-4 py-2 rounded-2xl bg-purple-600 hover:bg-purple-500 text-white text-xs font-bold transition-all flex items-center gap-1 shrink-0"
+                      className="px-4 py-2 rounded-2xl gradient-flow hover:opacity-95 text-white text-xs font-bold transition-all flex items-center gap-1 shrink-0 active:scale-95"
                     >
                       {searchingPlace ? 'Locating...' : 'Set GPS'}
                     </button>
@@ -590,7 +590,7 @@ export const BookingWizardModal: React.FC<BookingWizardModalProps> = ({
                           setPostalCode(chip.pin);
                           void handleSearchPlace(chip.q);
                         }}
-                        className="text-[10px] px-2.5 py-1 rounded-xl bg-obsidian-800 hover:bg-purple-900/40 border border-white/10 hover:border-purple-500/40 text-gray-300 hover:text-white transition-all"
+                        className="text-[10px] px-2.5 py-1 rounded-xl bg-[#13151f] hover:bg-[#ff6c4c]/20 border border-white/10 hover:border-[#ff6c4c]/40 text-gray-300 hover:text-white transition-all"
                       >
                         {chip.name}
                       </button>
@@ -602,21 +602,21 @@ export const BookingWizardModal: React.FC<BookingWizardModalProps> = ({
                 <div className="pt-2 border-t border-white/10 space-y-2">
                   <div className="flex items-center justify-between">
                     <span className="text-[10px] text-gray-400 font-bold uppercase tracking-wider flex items-center gap-1">
-                      <MapPin className="w-3 h-3 text-purple-400" />
+                      <MapPin className="w-3 h-3 text-[#ff6c4c]" />
                       Live GPS Sync
                     </span>
                     <button
                       type="button"
                       onClick={requestLiveLocation}
                       disabled={locationLoading}
-                      className="text-[10px] text-purple-300 hover:text-white bg-purple-600/30 hover:bg-purple-600/50 px-2.5 py-1 rounded-xl border border-purple-500/40 flex items-center gap-1 transition-all"
+                      className="text-[10px] text-[#ff8a6a] hover:text-white bg-[#ff6c4c]/20 hover:bg-[#ff6c4c]/40 px-2.5 py-1 rounded-xl border border-[#ff6c4c]/40 flex items-center gap-1 transition-all"
                     >
-                      <Navigation className={`w-3 h-3 text-purple-400 ${locationLoading ? 'animate-spin' : ''}`} />
+                      <Navigation className={`w-3 h-3 text-[#ff6c4c] ${locationLoading ? 'animate-spin' : ''}`} />
                       {locationLoading ? 'Detecting Device GPS...' : 'Detect Device GPS'}
                     </button>
                   </div>
 
-                  <div className="p-3 rounded-2xl bg-black/30 border border-white/5 text-[11px] text-gray-300 space-y-1">
+                  <div className="p-3 rounded-2xl bg-black/40 border border-white/5 text-[11px] text-gray-300 space-y-1">
                     <div className="flex items-center justify-between text-gray-400 text-[10px]">
                       <span>Coordinates: {latitude?.toFixed(4)}, {longitude?.toFixed(4)}</span>
                       <span className="text-emerald-400 font-mono">
@@ -638,7 +638,7 @@ export const BookingWizardModal: React.FC<BookingWizardModalProps> = ({
                 <button
                   type="button"
                   onClick={() => setStep((s) => (s - 1) as any)}
-                  className="px-4 py-2.5 rounded-xl bg-obsidian-800 text-xs font-semibold text-gray-300 hover:text-white transition-colors"
+                  className="px-4 py-2.5 rounded-xl bg-white/5 text-xs font-semibold text-gray-300 hover:text-white transition-colors"
                 >
                   Back
                 </button>
@@ -648,7 +648,7 @@ export const BookingWizardModal: React.FC<BookingWizardModalProps> = ({
                 <button
                   type="button"
                   onClick={() => setStep((s) => (s + 1) as any)}
-                  className="px-6 py-2.5 rounded-xl bg-purple-600 hover:bg-purple-500 text-white text-xs font-bold transition-all shadow-md shadow-purple-600/20"
+                  className="px-6 py-2.5 rounded-xl gradient-flow text-white text-xs font-bold transition-all shadow-md shadow-[#ff6c4c]/20 active:scale-95"
                 >
                   Continue Step {step + 1}
                 </button>
@@ -657,7 +657,7 @@ export const BookingWizardModal: React.FC<BookingWizardModalProps> = ({
                   type="button"
                   disabled={loading}
                   onClick={handleBookingSubmit}
-                  className="px-6 py-3 rounded-xl gradient-gold hover:opacity-95 text-black text-xs font-extrabold transition-all shadow-lg shadow-amber-500/25 flex items-center gap-2 hover:scale-105 active:scale-95"
+                  className="px-6 py-3 rounded-xl gradient-flow hover:opacity-95 text-white text-xs font-extrabold transition-all shadow-lg shadow-[#ff6c4c]/25 flex items-center gap-2 active:scale-95"
                 >
                   Confirm Appointment
                 </button>
