@@ -12,7 +12,7 @@ interface BarberDashboardProps {
 }
 
 /** How often the dashboard re-fetches from the server. */
-const POLL_INTERVAL_MS = 10000;
+const POLL_INTERVAL_MS = 20000;
 
 /** Assignment statuses where the barber is actively working the job. */
 const IN_FLIGHT: Assignment['status'][] = ['ACCEPTED', 'EN_ROUTE', 'ARRIVED', 'IN_PROGRESS'];

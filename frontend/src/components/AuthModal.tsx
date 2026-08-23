@@ -93,11 +93,19 @@ export const AuthModal: React.FC<AuthModalProps> = ({
   // Countdown timer for OTP
   useEffect(() => {
     let timer: any;
-    if (mode === 'forgot_password' && forgotStep === 2 && otpExpiresIn > 0) {
-      timer = setInterval(() => setOtpExpiresIn((prev) => Math.max(0, prev - 1)), 1000);
+    if (mode === 'forgot_password' && forgotStep === 2) {
+      timer = setInterval(() => {
+        setOtpExpiresIn((prev) => {
+          if (prev <= 1) {
+            clearInterval(timer);
+            return 0;
+          }
+          return prev - 1;
+        });
+      }, 1000);
     }
     return () => clearInterval(timer);
-  }, [mode, forgotStep, otpExpiresIn]);
+  }, [mode, forgotStep]);
 
   const handleAuthSubmit = async (e: React.FormEvent) => {
     e.preventDefault();

@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import type { BarberProfile } from '../types';
 import { barbersApi } from '../services/api';
 import { fetchLiveCoordinates, getCachedCoordinates } from '../services/location';
@@ -14,11 +14,17 @@ export const NearbyBarbersRadar: React.FC<NearbyBarbersRadarProps> = ({ onSelect
   const [coords, setCoords] = useState<{ latitude: number; longitude: number }>(getCachedCoordinates());
   const [locationLoading, setLocationLoading] = useState(false);
   const [loading, setLoading] = useState(true);
+  const hasFetchedRef = useRef(false);
+  const lastFetchKeyRef = useRef<string>('');
 
   // No placeholder barbers. The list previously fell back to three invented
   // profiles with non-ObjectId ids, so picking one silently created an
   // unassigned booking instead of a booking with that barber.
   const fetchNearby = async (lat: number, lng: number, r: number) => {
+    const fetchKey = `${lat.toFixed(4)},${lng.toFixed(4)},${r}`;
+    if (lastFetchKeyRef.current === fetchKey) return;
+    lastFetchKeyRef.current = fetchKey;
+
     setLoading(true);
     try {
       setBarbers(await barbersApi.getNearby({ latitude: lat, longitude: lng, radiusKm: r }));
@@ -30,7 +36,18 @@ export const NearbyBarbersRadar: React.FC<NearbyBarbersRadarProps> = ({ onSelect
   };
 
   useEffect(() => {
-    void fetchLiveCoordinates(true).then((live) => setCoords(live));
+    if (hasFetchedRef.current) return;
+    hasFetchedRef.current = true;
+    void fetchLiveCoordinates(true).then((live) => {
+      // Only update state if coords actually changed to avoid re-render loop
+      setCoords((prev) => {
+        if (prev.latitude.toFixed(4) === live.latitude.toFixed(4) &&
+            prev.longitude.toFixed(4) === live.longitude.toFixed(4)) {
+          return prev;
+        }
+        return live;
+      });
+    });
   }, []);
 
   useEffect(() => {

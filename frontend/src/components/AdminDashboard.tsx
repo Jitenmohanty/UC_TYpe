@@ -11,7 +11,7 @@ interface AdminDashboardProps {
   user: User | null;
 }
 
-const POLL_INTERVAL_MS = 10000;
+const POLL_INTERVAL_MS = 20000;
 
 const TERMINAL: Booking['status'][] = [
   'COMPLETED', 'CUSTOMER_CANCELLED', 'ADMIN_CANCELLED', 'EXPIRED',
