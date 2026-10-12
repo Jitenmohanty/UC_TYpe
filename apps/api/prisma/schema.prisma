@@ -1,0 +1,428 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+enum UserRole {
+  SUPER_ADMIN
+  TENANT_ADMIN
+  EMPLOYEE
+}
+
+enum TripStatus {
+  ENQUIRY
+  CONFIRMED
+  ONGOING
+  COMPLETED
+  CANCELLED
+}
+
+enum OtpPurpose {
+  LOGIN_2FA
+  VERIFY_EMAIL
+  RESET_PASSWORD
+}
+
+model Tenant {
+  id           String   @id @default(uuid()) @db.Uuid
+  name         String   @db.VarChar(160)
+  slug         String   @unique @db.VarChar(80)
+  planKey      String   @default("starter") @map("plan_key") @db.VarChar(40)
+  currency     String   @default("INR") @db.Char(3)
+  settings     Json     @default("{}")
+  suspendedAt  DateTime? @map("suspended_at") @db.Timestamptz(6)
+  deletedAt    DateTime? @map("deleted_at") @db.Timestamptz(6)
+  createdAt    DateTime @default(now()) @map("created_at") @db.Timestamptz(6)
+  users        User[]
+  roles        Role[]
+  tenantModules TenantModule[]
+  rolePermissions RolePermission[]
+  otpCodes     OtpCode[]
+  refreshTokens RefreshToken[]
+  auditLogs    AuditLog[]
+  customers    Customer[]
+  referencePersons ReferencePerson[]
+  bookings     Booking[]
+  vehicles     Vehicle[]
+  drivers      Driver[]
+  bookingAssignments BookingAssignment[]
+  vendors      Vendor[]
+  payments     Payment[]
+  expenses     Expense[]
+  commissions  Commission[]
+  invoices     Invoice[]
+  receipts     Receipt[]
+  customFieldDefs CustomFieldDef[]
+  counters     TenantCounter[]
+  @@map("tenants")
+}
+
+model User {
+  id             String    @id @default(uuid()) @db.Uuid
+  tenantId       String?   @map("tenant_id") @db.Uuid
+  tenant         Tenant?   @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  roleId         String?   @map("role_id") @db.Uuid
+  role           Role?     @relation(fields: [roleId], references: [id], onDelete: SetNull)
+  email          String    @db.VarChar(254)
+  passwordHash   String    @map("password_hash") @db.VarChar(255)
+  name           String    @db.VarChar(160)
+  roleKey        UserRole  @default(EMPLOYEE) @map("role_key")
+  emailVerifiedAt DateTime? @map("email_verified_at") @db.Timestamptz(6)
+  failedLoginCount Int     @default(0) @map("failed_login_count")
+  lockedUntil    DateTime? @map("locked_until") @db.Timestamptz(6)
+  deletedAt      DateTime? @map("deleted_at") @db.Timestamptz(6)
+  createdAt      DateTime  @default(now()) @map("created_at") @db.Timestamptz(6)
+  updatedAt      DateTime  @updatedAt @map("updated_at") @db.Timestamptz(6)
+  bookings       Booking[] @relation("BookingCreator")
+  @@unique([tenantId, email])
+  @@index([tenantId, createdAt])
+  @@map("users")
+}
+
+model Role {
+  id          String           @id @default(uuid()) @db.Uuid
+  tenantId    String           @map("tenant_id") @db.Uuid
+  tenant      Tenant           @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  key         String           @db.VarChar(60)
+  name        String           @db.VarChar(100)
+  permissions RolePermission[]
+  users       User[]
+  deletedAt   DateTime?        @map("deleted_at") @db.Timestamptz(6)
+  createdAt   DateTime         @default(now()) @map("created_at") @db.Timestamptz(6)
+  @@unique([tenantId, key])
+  @@map("roles")
+}
+
+model Permission {
+  id          String           @id @default(uuid()) @db.Uuid
+  key         String           @unique @db.VarChar(80)
+  description String           @db.VarChar(200)
+  roles       RolePermission[]
+  @@map("permissions")
+}
+
+model RolePermission {
+  tenantId     String     @map("tenant_id") @db.Uuid
+  tenant       Tenant     @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  roleId       String     @map("role_id") @db.Uuid
+  role         Role       @relation(fields: [roleId], references: [id], onDelete: Cascade)
+  permissionId String     @map("permission_id") @db.Uuid
+  permission   Permission @relation(fields: [permissionId], references: [id], onDelete: Cascade)
+  @@id([tenantId, roleId, permissionId])
+  @@map("role_permissions")
+}
+
+model Module {
+  id          String         @id @default(uuid()) @db.Uuid
+  key         String         @unique @db.VarChar(60)
+  name        String         @db.VarChar(100)
+  tenantLinks TenantModule[]
+  @@map("modules")
+}
+
+model TenantModule {
+  tenantId  String   @map("tenant_id") @db.Uuid
+  tenant    Tenant   @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  moduleId  String   @map("module_id") @db.Uuid
+  module    Module   @relation(fields: [moduleId], references: [id], onDelete: Cascade)
+  enabled   Boolean  @default(true)
+  @@id([tenantId, moduleId])
+  @@map("tenant_modules")
+}
+
+model OtpCode {
+  id          String    @id @default(uuid()) @db.Uuid
+  tenantId    String?   @map("tenant_id") @db.Uuid
+  tenant      Tenant?   @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  userId      String    @map("user_id") @db.Uuid
+  email       String    @db.VarChar(254)
+  purpose     OtpPurpose
+  codeHash    String    @map("code_hash") @db.VarChar(128)
+  attempts    Int       @default(0)
+  expiresAt   DateTime  @map("expires_at") @db.Timestamptz(6)
+  consumedAt  DateTime? @map("consumed_at") @db.Timestamptz(6)
+  createdAt   DateTime  @default(now()) @map("created_at") @db.Timestamptz(6)
+  @@index([tenantId, email, purpose, createdAt])
+  @@map("otp_codes")
+}
+
+model RefreshToken {
+  id          String    @id @default(uuid()) @db.Uuid
+  tenantId    String?   @map("tenant_id") @db.Uuid
+  tenant      Tenant?   @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  userId      String    @map("user_id") @db.Uuid
+  tokenHash   String    @map("token_hash") @unique @db.VarChar(128)
+  familyId    String    @map("family_id") @db.Uuid
+  expiresAt   DateTime  @map("expires_at") @db.Timestamptz(6)
+  revokedAt   DateTime? @map("revoked_at") @db.Timestamptz(6)
+  createdAt   DateTime  @default(now()) @map("created_at") @db.Timestamptz(6)
+  @@index([tenantId, userId, expiresAt])
+  @@map("refresh_tokens")
+}
+
+model AuditLog {
+  id         String   @id @default(uuid()) @db.Uuid
+  tenantId   String   @map("tenant_id") @db.Uuid
+  tenant     Tenant   @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  actorId    String?  @map("actor_id") @db.Uuid
+  action     String   @db.VarChar(120)
+  entityType String   @map("entity_type") @db.VarChar(80)
+  entityId   String?  @map("entity_id") @db.Uuid
+  beforeData Json?    @map("before_data")
+  afterData  Json?    @map("after_data")
+  ipAddress  String?  @map("ip_address") @db.VarChar(64)
+  createdAt  DateTime @default(now()) @map("created_at") @db.Timestamptz(6)
+  @@index([tenantId, createdAt])
+  @@map("audit_logs")
+}
+
+model Customer {
+  id           String      @id @default(uuid()) @db.Uuid
+  tenantId     String      @map("tenant_id") @db.Uuid
+  tenant       Tenant      @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  name         String      @db.VarChar(160)
+  email        String?     @db.VarChar(254)
+  phone        String      @db.VarChar(30)
+  company      String?     @db.VarChar(160)
+  notes        String?     @db.Text
+  customFields Json        @default("{}") @map("custom_fields")
+  deletedAt    DateTime?   @map("deleted_at") @db.Timestamptz(6)
+  createdAt    DateTime    @default(now()) @map("created_at") @db.Timestamptz(6)
+  updatedAt    DateTime    @updatedAt @map("updated_at") @db.Timestamptz(6)
+  bookings     Booking[]
+  @@index([tenantId, createdAt])
+  @@index([tenantId, name])
+  @@map("customers")
+}
+
+model ReferencePerson {
+  id        String    @id @default(uuid()) @db.Uuid
+  tenantId  String    @map("tenant_id") @db.Uuid
+  tenant    Tenant    @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  name      String    @db.VarChar(160)
+  phone     String?   @db.VarChar(30)
+  email     String?   @db.VarChar(254)
+  deletedAt DateTime? @map("deleted_at") @db.Timestamptz(6)
+  createdAt DateTime  @default(now()) @map("created_at") @db.Timestamptz(6)
+  bookings  Booking[]
+  @@index([tenantId, name])
+  @@map("reference_persons")
+}
+
+model Booking {
+  id                String           @id @default(uuid()) @db.Uuid
+  tenantId          String           @map("tenant_id") @db.Uuid
+  tenant            Tenant           @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  serialNo          String           @map("serial_no") @db.VarChar(32)
+  customerId        String?          @map("customer_id") @db.Uuid
+  customer          Customer?        @relation(fields: [customerId], references: [id], onDelete: SetNull)
+  referencePersonId String?          @map("reference_person_id") @db.Uuid
+  referencePerson   ReferencePerson? @relation(fields: [referencePersonId], references: [id], onDelete: SetNull)
+  createdById       String?          @map("created_by_id") @db.Uuid
+  createdBy         User?            @relation("BookingCreator", fields: [createdById], references: [id], onDelete: SetNull)
+  customerName      String           @map("customer_name") @db.VarChar(160)
+  customerEmail     String?          @map("customer_email") @db.VarChar(254)
+  customerPhone     String           @map("customer_phone") @db.VarChar(30)
+  destination       String           @db.VarChar(180)
+  startDate         DateTime         @map("start_date") @db.Timestamptz(6)
+  totalAmount       Decimal          @map("total_amount") @db.Decimal(14, 2)
+  advanceAmount     Decimal          @default(0) @map("advance_amount") @db.Decimal(14, 2)
+  status            TripStatus       @default(ENQUIRY)
+  notes             String?          @db.Text
+  customFields      Json             @default("{}") @map("custom_fields")
+  deletedAt         DateTime?        @map("deleted_at") @db.Timestamptz(6)
+  createdAt         DateTime         @default(now()) @map("created_at") @db.Timestamptz(6)
+  updatedAt         DateTime         @updatedAt @map("updated_at") @db.Timestamptz(6)
+  assignments       BookingAssignment[]
+  payments          Payment[]
+  commissions       Commission[]
+  invoices          Invoice[]
+  @@unique([tenantId, serialNo])
+  @@index([tenantId, startDate])
+  @@index([tenantId, status, startDate])
+  @@index([tenantId, customerName])
+  @@map("bookings")
+}
+
+model Vehicle {
+  id               String              @id @default(uuid()) @db.Uuid
+  tenantId         String              @map("tenant_id") @db.Uuid
+  tenant           Tenant              @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  registrationNo   String              @map("registration_no") @db.VarChar(24)
+  type             String              @db.VarChar(60)
+  capacity         Int
+  insuranceExpires DateTime?            @map("insurance_expires") @db.Date
+  permitExpires    DateTime?            @map("permit_expires") @db.Date
+  notes            String?             @db.Text
+  deletedAt        DateTime?           @map("deleted_at") @db.Timestamptz(6)
+  createdAt        DateTime            @default(now()) @map("created_at") @db.Timestamptz(6)
+  assignments      BookingAssignment[]
+  @@unique([tenantId, registrationNo])
+  @@index([tenantId, createdAt])
+  @@map("vehicles")
+}
+
+model Driver {
+  id               String              @id @default(uuid()) @db.Uuid
+  tenantId         String              @map("tenant_id") @db.Uuid
+  tenant           Tenant              @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  name             String              @db.VarChar(160)
+  phone            String              @db.VarChar(30)
+  licenseNo        String              @map("license_no") @db.VarChar(40)
+  licenseExpires   DateTime?            @map("license_expires") @db.Date
+  deletedAt        DateTime?           @map("deleted_at") @db.Timestamptz(6)
+  createdAt        DateTime            @default(now()) @map("created_at") @db.Timestamptz(6)
+  assignments      BookingAssignment[]
+  @@unique([tenantId, licenseNo])
+  @@index([tenantId, name])
+  @@map("drivers")
+}
+
+model BookingAssignment {
+  id        String   @id @default(uuid()) @db.Uuid
+  tenantId  String   @map("tenant_id") @db.Uuid
+  tenant    Tenant   @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  bookingId String   @map("booking_id") @db.Uuid
+  booking   Booking  @relation(fields: [bookingId], references: [id], onDelete: Cascade)
+  vehicleId String?  @map("vehicle_id") @db.Uuid
+  vehicle   Vehicle? @relation(fields: [vehicleId], references: [id], onDelete: SetNull)
+  driverId  String?  @map("driver_id") @db.Uuid
+  driver    Driver?  @relation(fields: [driverId], references: [id], onDelete: SetNull)
+  startAt   DateTime @map("start_at") @db.Timestamptz(6)
+  endAt     DateTime @map("end_at") @db.Timestamptz(6)
+  deletedAt DateTime? @map("deleted_at") @db.Timestamptz(6)
+  createdAt DateTime @default(now()) @map("created_at") @db.Timestamptz(6)
+  @@index([tenantId, startAt, endAt])
+  @@index([tenantId, vehicleId, startAt, endAt])
+  @@index([tenantId, driverId, startAt, endAt])
+  @@map("booking_assignments")
+}
+
+model Vendor {
+  id          String   @id @default(uuid()) @db.Uuid
+  tenantId    String   @map("tenant_id") @db.Uuid
+  tenant      Tenant   @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  name        String   @db.VarChar(160)
+  phone       String?  @db.VarChar(30)
+  email       String?  @db.VarChar(254)
+  serviceType String?  @map("service_type") @db.VarChar(80)
+  deletedAt   DateTime? @map("deleted_at") @db.Timestamptz(6)
+  createdAt   DateTime @default(now()) @map("created_at") @db.Timestamptz(6)
+  payments    Payment[]
+  expenses    Expense[]
+  @@index([tenantId, name])
+  @@map("vendors")
+}
+
+model Payment {
+  id          String   @id @default(uuid()) @db.Uuid
+  tenantId    String   @map("tenant_id") @db.Uuid
+  tenant      Tenant   @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  bookingId   String?  @map("booking_id") @db.Uuid
+  booking     Booking? @relation(fields: [bookingId], references: [id], onDelete: SetNull)
+  vendorId    String?  @map("vendor_id") @db.Uuid
+  vendor      Vendor?  @relation(fields: [vendorId], references: [id], onDelete: SetNull)
+  amount      Decimal  @db.Decimal(14, 2)
+  direction   String   @db.VarChar(16)
+  method      String?  @db.VarChar(40)
+  reference   String?  @db.VarChar(100)
+  paidAt      DateTime @map("paid_at") @db.Timestamptz(6)
+  deletedAt   DateTime? @map("deleted_at") @db.Timestamptz(6)
+  createdAt   DateTime @default(now()) @map("created_at") @db.Timestamptz(6)
+  @@index([tenantId, paidAt])
+  @@map("payments")
+}
+
+model Expense {
+  id          String   @id @default(uuid()) @db.Uuid
+  tenantId    String   @map("tenant_id") @db.Uuid
+  tenant      Tenant   @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  vendorId    String?  @map("vendor_id") @db.Uuid
+  vendor      Vendor?  @relation(fields: [vendorId], references: [id], onDelete: SetNull)
+  category    String   @db.VarChar(80)
+  description String?  @db.VarChar(240)
+  amount      Decimal  @db.Decimal(14, 2)
+  incurredAt  DateTime @map("incurred_at") @db.Timestamptz(6)
+  deletedAt   DateTime? @map("deleted_at") @db.Timestamptz(6)
+  createdAt   DateTime @default(now()) @map("created_at") @db.Timestamptz(6)
+  @@index([tenantId, incurredAt])
+  @@map("expenses")
+}
+
+model Commission {
+  id          String   @id @default(uuid()) @db.Uuid
+  tenantId    String   @map("tenant_id") @db.Uuid
+  tenant      Tenant   @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  bookingId   String   @map("booking_id") @db.Uuid
+  booking     Booking  @relation(fields: [bookingId], references: [id], onDelete: Cascade)
+  amount      Decimal  @db.Decimal(14, 2)
+  payeeName   String?  @map("payee_name") @db.VarChar(160)
+  deletedAt   DateTime? @map("deleted_at") @db.Timestamptz(6)
+  createdAt   DateTime @default(now()) @map("created_at") @db.Timestamptz(6)
+  @@index([tenantId, bookingId])
+  @@map("commissions")
+}
+
+model Invoice {
+  id          String   @id @default(uuid()) @db.Uuid
+  tenantId    String   @map("tenant_id") @db.Uuid
+  tenant      Tenant   @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  bookingId   String   @map("booking_id") @db.Uuid
+  booking     Booking  @relation(fields: [bookingId], references: [id], onDelete: Cascade)
+  number      String   @db.VarChar(40)
+  total       Decimal  @db.Decimal(14, 2)
+  issuedAt    DateTime @map("issued_at") @db.Timestamptz(6)
+  dueAt       DateTime? @map("due_at") @db.Timestamptz(6)
+  deletedAt   DateTime? @map("deleted_at") @db.Timestamptz(6)
+  createdAt   DateTime @default(now()) @map("created_at") @db.Timestamptz(6)
+  receipts    Receipt[]
+  @@unique([tenantId, number])
+  @@map("invoices")
+}
+
+model Receipt {
+  id          String   @id @default(uuid()) @db.Uuid
+  tenantId    String   @map("tenant_id") @db.Uuid
+  tenant      Tenant   @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  invoiceId   String?  @map("invoice_id") @db.Uuid
+  invoice     Invoice? @relation(fields: [invoiceId], references: [id], onDelete: SetNull)
+  paymentId   String?  @map("payment_id") @db.Uuid
+  number      String   @db.VarChar(40)
+  amount      Decimal  @db.Decimal(14, 2)
+  issuedAt    DateTime @map("issued_at") @db.Timestamptz(6)
+  deletedAt   DateTime? @map("deleted_at") @db.Timestamptz(6)
+  createdAt   DateTime @default(now()) @map("created_at") @db.Timestamptz(6)
+  @@unique([tenantId, number])
+  @@map("receipts")
+}
+
+model CustomFieldDef {
+  id         String   @id @default(uuid()) @db.Uuid
+  tenantId   String   @map("tenant_id") @db.Uuid
+  tenant     Tenant   @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  entityType String   @map("entity_type") @db.VarChar(60)
+  key        String   @db.VarChar(80)
+  label      String   @db.VarChar(120)
+  fieldType  String   @map("field_type") @db.VarChar(24)
+  options    Json     @default("[]")
+  required   Boolean  @default(false)
+  createdAt  DateTime @default(now()) @map("created_at") @db.Timestamptz(6)
+  @@unique([tenantId, entityType, key])
+  @@map("custom_field_defs")
+}
+
+model TenantCounter {
+  id        String   @id @default(uuid()) @db.Uuid
+  tenantId  String   @map("tenant_id") @db.Uuid
+  tenant    Tenant   @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  year      Int
+  resource  String   @db.VarChar(40)
+  value     Int      @default(0)
+  updatedAt DateTime @updatedAt @map("updated_at") @db.Timestamptz(6)
+  @@unique([tenantId, year, resource])
+  @@map("tenant_counters")
+}

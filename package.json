@@ -1,0 +1,19 @@
+{
+  "name": "routewise-crm",
+  "private": true,
+  "packageManager": "pnpm@11.25.0",
+  "scripts": {
+    "dev": "pnpm --parallel --filter @routewise/api --filter @routewise/web dev",
+    "dev:web": "pnpm --filter @routewise/web dev",
+    "dev:api": "pnpm --filter @routewise/api dev",
+    "build": "pnpm --filter @routewise/shared check && pnpm --filter @routewise/api build && pnpm --filter @routewise/web build",
+    "lint": "pnpm --recursive lint",
+    "db:generate": "pnpm --filter @routewise/api db:generate",
+    "db:migrate": "pnpm --filter @routewise/api db:migrate",
+    "db:seed": "pnpm --filter @routewise/api db:seed",
+    "test:tenant-isolation": "pnpm --filter @routewise/api test:tenant-isolation"
+  },
+  "devDependencies": {
+    "typescript": "^5.9.3"
+  }
+}

@@ -1,0 +1,13 @@
+node_modules/
+.pnpm-store/
+.next/
+dist/
+coverage/
+.env
+.env.*
+!.env.example
+.vercel/
+.turbo/
+.agents/skills/
+*.log
+apps/api/prisma/generated/
